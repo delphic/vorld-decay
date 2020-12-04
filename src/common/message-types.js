@@ -1,6 +1,8 @@
-let messageTypes = module.exports = {
+// message type enum
+var MessageType = module.exports = {
   CONNECTED: "connected",
   DISCONNECTED: "diconnected",
   GREET: "greet",
-  ACKNOWLEDGE: "acknowledge"
+  ACKNOWLEDGE: "acknowledge",
+  POSITION: "position"
 };

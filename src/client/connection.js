@@ -5,7 +5,7 @@
 // Very thin wrapper around a web socket, makes it purely send and receive JSON
 // Currently single static connection - no create method.
 
-var connection = module.exports = (function() {
+var Connection = module.exports = (function() {
   var exports = {};
 
   let isDebug;
@@ -18,9 +18,10 @@ var connection = module.exports = (function() {
     window.setTimeout(ping, pingInterval);
   };
   let ping =  () => {
-    // TODO: Check Status
-    webSocket.send(JSON.stringify({ type: "ping" }));
-    schedulePing();
+    if (webSocket.readyState == 1) {
+      webSocket.send(JSON.stringify({ type: "ping" }));
+      schedulePing();
+    }
   };
 
   exports.send = (obj) => {
@@ -29,7 +30,7 @@ var connection = module.exports = (function() {
 
 	exports.connect = (params) => {
     isDebug = params.isDebug;
-		webSocket = new WebSocket(params.uri);
+    webSocket = new WebSocket(params.uri);
 
     if (params.onopen) {
       onopen = params.onopen;

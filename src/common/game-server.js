@@ -37,8 +37,16 @@ let GameServer = module.exports = (function() {
         let nick = message.nick;
         if (!nick) nick = "Player " + (id + 1);
         globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
-        sendMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
-        distributeMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+        distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+        break;
+      case MessageType.POSITION:
+        message.id = id;
+        globalState.players[id].position = message.position;
+        distributeMessage(id, message);
+        break;
+      default:
+        message.id = id;
+        distributeMessage(id, message);
         break;
     }
   };

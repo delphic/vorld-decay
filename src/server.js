@@ -1,5 +1,5 @@
 let uWS = require('uWebSockets.js');
-let closeCodes = require('./common/websocket-close-codes');
+let CloseCode = require('./common/websocket-close-codes');
 
 // Config
 // Would be better read from a config file
@@ -17,15 +17,15 @@ if (isLocalHost) {
   });
 }
 
-let connections = require('./server/connections');
-connections.init(maxConnections, isLocalHost);
+let Connections = require('./server/connections');
+Connections.init(maxConnections, isLocalHost);
 
-let gameServer = require('./common/game-server');
-gameServer.init(
+let GameServer = require('./common/game-server');
+GameServer.init(
   // For local relay don't want to have to stringfy so we do that in the
   // functions we pass to the game server/
-  (id, message) => { connections.sendMessage(id, JSON.stringify(message)); },
-  (id, message) => { connections.distribute(id, JSON.stringify(message)); }
+  (id, message) => { Connections.sendMessage(id, JSON.stringify(message)); },
+  (id, message) => { Connections.distribute(id, JSON.stringify(message)); }
 );
 
 app.ws("/*", {
@@ -36,28 +36,28 @@ app.ws("/*", {
   /* WS events */
 	/* DOCS: https://unetworking.github.io/uWebSockets.js/generated/interfaces/websocketbehavior.html */
 	open: (ws) => {
-    if (connections.wsopen(ws)) {
-      gameServer.onclientconnect(ws.id);
+    if (Connections.wsopen(ws)) {
+      GameServer.onclientconnect(ws.id);
     }
   },
   message: (ws, message, isBinary) => {
     // Assuming JSON for now
     let json = Buffer.from(message).toString();
-    gameServer.onmessage(ws.id, JSON.parse(json), isBinary);
+    GameServer.onmessage(ws.id, JSON.parse(json), isBinary);
   },
   drain: (ws) => { /* Backed up message sent, if we were throttling we could now lift it - should check ws.getBufferedAmount() to drive throttling */ },
   close: (ws, code, message) => {
     let id = ws.id;
-    if (connections.wsclose(ws)) {
-      gameServer.onclientdisconnect(id);
-    } else if (code != closeCodes.SERVER_FULL) {
+    if (Connections.wsclose(ws)) {
+      GameServer.onclientdisconnect(id);
+    } else if (code != CloseCode.SERVER_FULL) {
       if (isLocalHost) console.log("Untracked ws connection closed");
     }
   }
 });
 
 app.get("/*", (res, req) => {
-	res.writeStatus('200 OK').end("Vorld Decay Server Running, " + connections.getConnectionCount() + " connected clients.");
+	res.writeStatus('200 OK').end("Vorld Decay Server Running, " + Connections.getConnectionCount() + " connected clients.");
 });
 
 app.listen(9001, (listenSocket) => {

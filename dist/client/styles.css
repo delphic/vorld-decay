@@ -4,8 +4,8 @@ html, body {
   font-family: monospace;
   overflow: hidden;
 }
-canvas {
+#fury {
   display: block;
-  margin: 1em;
-  border: 1px solid black;
+	width: 100%;
+	height: 100vh;
 }

@@ -3,7 +3,7 @@
 // Does not contain player or position tracking as that needs to be in common
 let closeCodes = require('../common/websocket-close-codes');
 
-let connections = module.exports = (function() {
+let Connections = module.exports = (function() {
   var exports = {};
 
   let isDebug;
