@@ -2002,11 +2002,42 @@ let isLocalHost = true;
 
 let connection = require('./client/connection');
 let gameClient = require('./client/game-client');
+let gameServer = require('./common/game-server');
 
 window.onload = (event) => {
   let wsOpened = false;
   let connected = false;
   let nick = "";
+
+  // Not sure we should really be handling greet acknowledge here
+  // The only reason we do is so we know what send function to send to the client
+  let sendGreet = (id, send) => {
+    // TODO: Slightly nicer prompt UI - callback to send greet
+    nick = prompt("Enter your nick name", "Player");
+    if (!nick) nick = "Player" + id;
+    send({ type: messageTypes.GREET, nick: nick });
+  };
+
+  let localRelay = (message) => {
+    gameServer.onmessage(0, message);
+  };
+
+  let setupLocalServer = () => {
+    gameServer.init(
+      (id, message) => {
+        if (message.type == messageTypes.ACKNOWLEDGE) {
+          gameClient.init(message.id, message.data, localRelay);
+          sendGreet(0, localRelay);
+        } else {
+          gameClient.onmessage(message);
+        }
+      },
+      (id, message) => { if (id == -1) gameClient.onmessage(message); });
+
+    // Might need to wait for local server to be ready
+    // before faking a connection a connection like this
+    gameServer.onclientconnect(0);
+  };
 
   // Try to connect to web socket server
   // Note:
@@ -2022,13 +2053,8 @@ window.onload = (event) => {
     onmessage: (message) => {
       if (!connected && message.type == messageTypes.ACKNOWLEDGE) {
         connected = true;
-        // Initialise gameClient
         gameClient.init(message.id, message.data, connection.send);
-
-        // TODO: Slightly nicer prompt UI - callback to send greet
-        nick = prompt("Enter your nick name", "Player");
-        if (!nick) nick = "Player" + message.id;
-        connection.send({ type: messageTypes.GREET, nick: nick });
+        sendGreet(message.id, connection.send);
       } else if (connected) {
         gameClient.onmessage(message);
       } else {
@@ -2039,7 +2065,7 @@ window.onload = (event) => {
     onclose: (code) => {
       connected = false;
       if (!wsOpened || code == closeCodes.SERVER_FULL) {
-        // Create GameServer and Relay - inject send message function to game client
+        setupLocalServer();
       } else if (connected) {
         // Handle Disconnect
         alert("Disconnected from Server!");
@@ -2051,7 +2077,7 @@ window.onload = (event) => {
   // Start loading assets as needed, show loading display / overlay.
 };
 
-},{"../fury/src/fury.js":4,"./client/connection":17,"./client/game-client":18,"./common/message-types":19,"./common/websocket-close-codes":20}],17:[function(require,module,exports){
+},{"../fury/src/fury.js":4,"./client/connection":17,"./client/game-client":18,"./common/game-server":19,"./common/message-types":20,"./common/websocket-close-codes":21}],17:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2171,7 +2197,60 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../common/message-types":19}],19:[function(require,module,exports){
+},{"../common/message-types":20}],19:[function(require,module,exports){
+// Game Server!
+// Handles the greet / acknoledge
+// informing the gameclient of their player id and any required on connection state
+// as well as informing the other clients that someone connected
+// Also handles everything else we want to be server authoritative, e.g. level generation
+let MessageType = require('./message-types');
+
+let GameServer = module.exports = (function() {
+  let exports = {};
+
+  // Format is (idToSendTo, objectToSend) for message
+  // Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
+  let sendMessage, distributeMessage;
+
+  let initialSpawnPosition = [0, 1, 0];
+  // TODO: going to need some level management code!
+
+  // This is information which needs to be sent on client connection
+  let globalState = {
+    players: []
+  };
+
+  exports.init = (sendDelegate, distributeDelegate) => {
+    sendMessage = sendDelegate;
+    distributeMessage = distributeDelegate;
+
+    // TODO: Start creating the game world baby
+  };
+
+  exports.onclientconnect = (id) => {
+    sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: globalState });
+  };
+
+  exports.onmessage = (id, message) => {
+    switch(message.type) {
+      case MessageType.GREET:
+        globalState.players[id] = { id: id, nick: message.nick, position: initialSpawnPosition };
+        sendMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+        distributeMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+        break;
+    }
+  };
+
+  exports.onclientdisconnect = (id) => {
+    globalState.players[id] = null;
+    distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+  };
+
+  return exports;
+
+})();
+
+},{"./message-types":20}],20:[function(require,module,exports){
 let messageTypes = module.exports = {
   CONNECTED: "connected",
   DISCONNECTED: "diconnected",
@@ -2179,7 +2258,7 @@ let messageTypes = module.exports = {
   ACKNOWLEDGE: "acknowledge"
 };
 
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
