@@ -221,6 +221,8 @@ var Camera = module.exports = function() {
 			// Note : https://stackoverflow.com/questions/31788925/correct-frustum-aabb-intersection
 			// TODO: Profile and try different techniques (using continue in the loop, unrolling the lot, etc)
 			vec4Cache[3] = 1;
+			// Consider wrapping this cache in an anon function execution to keep scope minimal, see of it improves performance
+			// i.e. isInFrustum = (function() { let cache = vec4.create(); return function(bounds) { /* implementation */ }; })();
 			for (let i = 0; i < 6; i++) {
 				let out = 0;
 				vec4Cache[0] = bounds.min[0], vec4Cache[1] = bounds.max[1], vec4Cache[2] = bounds.min[2];
@@ -287,7 +289,7 @@ var Camera = module.exports = function() {
 		camera.type = parameters.type ? parameters.type : Type.Perspective;
 		camera.near = parameters.near;
 		camera.far = parameters.far;
-		
+
 		if(camera.type == Type.Perspective) {
 			// vertical field of view, ratio (aspect) determines horizontal fov
 			camera.fov = parameters.fov;
@@ -1991,10 +1993,107 @@ var Transform = module.exports = function() {
 }();
 
 },{"./maths":8}],16:[function(require,module,exports){
-var Fury = require('../fury/src/fury.js');
+let Fury = require('../fury/src/fury.js');
+
+let isLocalHost = true;
+let connection = require('./client/connection');
 
 window.onload = (event) => {
+  // Try to connect to ws
+  let connectedToServer = false;  // TODO: Test no server and test server max connections reached
+
+  // No server gives an error *then* a close, onopen is never called
+  // Full server gives open *then* a close
+
+  connection.connect({
+    isDebug: isLocalHost,
+    uri: isLocalHost ? "ws://localhost:9001" : "wss://delphic.me.uk:9001",
+    onopen: () => { /* Inject methods for sending messages into GameClient */ },
+    onmessage: (message) => { /* Send to GameClient */ },
+    onerror: () => { /* If not yet connected, create relay and then inject method for sending messages using that into gameclient */ },
+    onclose: (code) => { /* If never connected, create realy and then inject method for sending messages using that into gameclient, else show disconnection message */ }
+  });
+
   Fury.init("fury"); // Consider anti-alias false
+  // Start loading assets as needed, show loading display / overlay.
 };
 
-},{"../fury/src/fury.js":4}]},{},[16]);
+},{"../fury/src/fury.js":4,"./client/connection":17}],17:[function(require,module,exports){
+// Handles connecting to web socket server
+// and provides messaging methods - but these should rarely be called directly
+// as we may want to be using a local message relay instead
+
+// Very thin wrapper around a web socket, makes it purely send and receive JSON
+// Currently single static connection - no create method.
+
+var connection = module.exports = (function() {
+  var exports = {};
+
+  let isDebug;
+  let webSocket;
+  let connectionId;
+  let onopen, onerror, onclose, onmessage;
+
+  const pingInterval = 60 * 1000; // 60s
+  let schedulePing = () => {
+    window.setTimeout(ping, pingInterval);
+  };
+  let ping =  () => {
+    // TODO: Check Status
+    webSocket.send(JSON.stringify({ type: "ping" }));
+    schedulePing();
+  };
+
+  exports.send = (obj) => {
+    webSocket.send(JSON.stringify(obj));
+  };
+
+	exports.connect = (params) => {
+    isDebug = params.isDebug;
+		webSocket = new WebSocket(params.uri);
+
+    if (params.onopen) {
+      onopen = params.onopen;
+    } else {
+      onopen = () => {};
+    }
+    if (params.onerror) {
+      onerror = params.onerror;
+    } else {
+      onerror = () => {};
+    }
+    if (params.onclose) {
+      onclose = params.onclose;
+    } else {
+      onclose = () => {};
+    }
+    if (params.onmessage) {
+      onmessage = params.onmessage;
+    } else {
+      onmessage = () => {};
+    }
+
+    webSocket.onopen = (event) => {
+			if (isDebug) console.log("Web Socket Open");
+			schedulePing();
+      onopen();
+		};
+		webSocket.onerror = (event) => {
+			if (isDebug) console.log("WebSocket Error Observed: ", event);
+      onerror();
+		};
+		webSocket.onclose = (event) => {
+      if (isDebug) console.log("Web Socket Closed " + event.code + " " + event.reason);
+      onclose(event.code);
+		};
+		webSocket.onmessage = (event) => {
+			if (isDebug) console.log(event.data);
+      let message = JSON.parse(event.data);
+      onmessage(message);
+		};
+	};
+
+  return exports;
+})();
+
+},{}]},{},[16]);
