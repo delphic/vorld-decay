@@ -34,7 +34,9 @@ let GameServer = module.exports = (function() {
   exports.onmessage = (id, message) => {
     switch(message.type) {
       case MessageType.GREET:
-        globalState.players[id] = { id: id, nick: message.nick, position: initialSpawnPosition };
+        let nick = message.nick;
+        if (!nick) nick = "Player " + (id + 1);
+        globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
         sendMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         distributeMessage(id, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;

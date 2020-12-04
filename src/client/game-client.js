@@ -1,4 +1,5 @@
 let messageType = require('../common/message-types');
+let Fury = require('../../fury/src/fury.js');
 
 // Game Client
 // Handles the visuals, local player movement, and interp of remote clients
@@ -6,31 +7,43 @@ let GameClient = module.exports = (function(){
   let exports = {};
 
   let localId = -1;
+  let localNick = "";
   let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
 
-  let gameState = {
+  let serverState = {
     players: [] // Contains id, position, nick
   };
 
-  exports.init = (id, state, sendDelegate) => {
-    localId = id;
-    gameState.players = state.players; // Overwrite player data
-    // TODO: Create visuals for all existing player
+  let handleInitialServerState = (state) => {
+    serverState = state;
+    // TODO: Create visuals for all existing players
+  };
+
+  exports.init = (nick, sendDelegate) => {
     sendMessage = sendDelegate;
+    localNick = nick;
+    Fury.init("fury"); // Consider anti-alias false
+    // Start loading assets
   };
 
   exports.onmessage = (message) => {
     switch(message.type) {
+      case messageType.ACKNOWLEDGE:
+        localId = message.id;
+        handleInitialServerState(message.data);
+        sendMessage({ type: messageType.GREET, nick: localNick });
+        break;
       case messageType.CONNECTED:
-        gameState.players[message.id] = message.player;
+        serverState.players[message.id] = message.player;
         if (message.id == localId) {
+          localNick = message.player.nick;
           // TODO: Spawn own player
         } else {
           // TODO: Spawn replica
         }
         break;
       case messageType.DISCONNECTED:
-        gameState.players[message.id] = null;
+        serverState.players[message.id] = null;
         // TODO: Despawn player visuals
         break;
     }
