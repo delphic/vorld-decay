@@ -1994,31 +1994,64 @@ var Transform = module.exports = function() {
 
 },{"./maths":8}],16:[function(require,module,exports){
 let Fury = require('../fury/src/fury.js');
+let closeCodes = require('./common/websocket-close-codes');
+let messageTypes = require('./common/message-types');
 
 let isLocalHost = true;
+// ^^ => Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
+
 let connection = require('./client/connection');
+let gameClient = require('./client/game-client');
 
 window.onload = (event) => {
-  // Try to connect to ws
-  let connectedToServer = false;  // TODO: Test no server and test server max connections reached
+  let wsOpened = false;
+  let connected = false;
+  let nick = "";
 
-  // No server gives an error *then* a close, onopen is never called
-  // Full server gives open *then* a close
-
+  // Try to connect to web socket server
+  // Note:
+  // No server present results in an error *then* a close (code 1006) (onopen is never called)
+  // Full server results in an open event *then* a close (code 4006) (no error event)
   connection.connect({
     isDebug: isLocalHost,
     uri: isLocalHost ? "ws://localhost:9001" : "wss://delphic.me.uk:9001",
-    onopen: () => { /* Inject methods for sending messages into GameClient */ },
-    onmessage: (message) => { /* Send to GameClient */ },
-    onerror: () => { /* If not yet connected, create relay and then inject method for sending messages using that into gameclient */ },
-    onclose: (code) => { /* If never connected, create realy and then inject method for sending messages using that into gameclient, else show disconnection message */ }
+    onopen: () => {
+      wsOpened = true;
+      // Wait for server acknowledge before starting game client
+    },
+    onmessage: (message) => {
+      if (!connected && message.type == messageTypes.ACKNOWLEDGE) {
+        connected = true;
+        // Initialise gameClient
+        gameClient.init(message.id, message.data, connection.send);
+
+        // TODO: Slightly nicer prompt UI - callback to send greet
+        nick = prompt("Enter your nick name", "Player");
+        if (!nick) nick = "Player" + message.id;
+        connection.send({ type: messageTypes.GREET, nick: nick });
+      } else if (connected) {
+        gameClient.onmessage(message);
+      } else {
+        console.error("Received unexpected message before connection acknowledged");
+      }
+    },
+    onerror: () => { /* Maybe do something IDK */ },
+    onclose: (code) => {
+      connected = false;
+      if (!wsOpened || code == closeCodes.SERVER_FULL) {
+        // Create GameServer and Relay - inject send message function to game client
+      } else if (connected) {
+        // Handle Disconnect
+        alert("Disconnected from Server!");
+      }
+    }
   });
 
   Fury.init("fury"); // Consider anti-alias false
   // Start loading assets as needed, show loading display / overlay.
 };
 
-},{"../fury/src/fury.js":4,"./client/connection":17}],17:[function(require,module,exports){
+},{"../fury/src/fury.js":4,"./client/connection":17,"./client/game-client":18,"./common/message-types":19,"./common/websocket-close-codes":20}],17:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2083,7 +2116,7 @@ var connection = module.exports = (function() {
       onerror();
 		};
 		webSocket.onclose = (event) => {
-      if (isDebug) console.log("Web Socket Closed " + event.code + " " + event.reason);
+      if (isDebug) console.log("Web Socket Closed: " + event.code + " - " + event.reason);
       onclose(event.code);
 		};
 		webSocket.onmessage = (event) => {
@@ -2094,6 +2127,68 @@ var connection = module.exports = (function() {
 	};
 
   return exports;
+})();
+
+},{}],18:[function(require,module,exports){
+let messageType = require('../common/message-types');
+
+// Game Client
+// Handles the visuals, local player movement, and interp of remote clients
+let GameClient = module.exports = (function(){
+  let exports = {};
+
+  let localId = -1;
+  let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
+
+  let gameState = {
+    players: [] // Contains id, position, nick
+  };
+
+  exports.init = (id, state, sendDelegate) => {
+    localId = id;
+    gameState.player = state.players; // Overwrite player data
+    // TODO: Create visuals for all existing player
+    sendMessage = sendDelegate;
+  };
+
+  exports.onmessage = (message) => {
+    switch(message.type) {
+      case messageType.CONNECTED:
+        gameState.players[message.id] = message.player;
+        if (message.id == localId) {
+          // TODO: Spawn own player
+        } else {
+          // TODO: Spawn replica
+        }
+        break;
+      case messageType.DISCONNECTED:
+        gameState.players[message.id] = null;
+        // TODO: Despawn player visuals
+        break;
+    }
+  };
+
+  return exports;
+})();
+
+},{"../common/message-types":19}],19:[function(require,module,exports){
+let messageTypes = module.exports = {
+  CONNECTED: "connected",
+  DISCONNECTED: "diconnected",
+  GREET: "greet",
+  ACKNOWLEDGE: "acknowledge"
+};
+
+},{}],20:[function(require,module,exports){
+module.exports = (function() {
+  // These codes are used in the close event
+  // Permissable values are between 4000 -> 4999
+  // https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent
+  var codes = {};
+
+  codes.SERVER_FULL = 4001;
+
+  return codes;
 })();
 
 },{}]},{},[16]);

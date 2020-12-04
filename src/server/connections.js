@@ -27,7 +27,7 @@ let connections = module.exports = (function() {
   let removeConnection = (ws) => {
     connections[ws.id] = null;
     connectionCount -= 1;
-    if (isDebug) console.log("[" + i + "] Removed connection");
+    if (isDebug) console.log("[" + ws.id + "] Removed connection");
   };
 
   exports.init = (maxConnectionCount, debug) => {
@@ -55,9 +55,19 @@ let connections = module.exports = (function() {
   exports.wsclose = (ws) => {
     if (ws.id !== undefined) {
       removeConnection(ws);
+      ws.id = null;
       return true;
     }
     return false;
+  };
+
+  // May need a priority system if throttling becomes a thing, always
+  // want certain messages sent ASAP - arguably this could be achieved
+  // via multiple socket connections, don't know if this is standard however
+  exports.sendMessage = (targetId, message, isBinary) => {
+    if (connections[targetId]) {
+      let ok = connections[targetId].send(message, isBinary, true);
+    }
   };
 
   exports.distribute = (senderId, message, isBinary) => {
