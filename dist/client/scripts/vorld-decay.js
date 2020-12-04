@@ -2010,7 +2010,9 @@ window.onload = (event) => {
   let nick = "";
 
   // Not sure we should really be handling greet acknowledge here
-  // The only reason we do is so we know what send function to send to the client
+  // The only reason we do is so we know what send function to give to the client
+  // Maybe lets just give it a delegate which can redirect as appropriate
+  // i.e. if connected -> connection.send else localRelay
   let sendGreet = (id, send) => {
     // TODO: Slightly nicer prompt UI - callback to send greet
     nick = prompt("Enter your nick name", "Player");
@@ -2040,7 +2042,6 @@ window.onload = (event) => {
   };
 
   // Try to connect to web socket server
-  // Note:
   // No server present results in an error *then* a close (code 1006) (onopen is never called)
   // Full server results in an open event *then* a close (code 4006) (no error event)
   connection.connect({
@@ -2172,7 +2173,7 @@ let GameClient = module.exports = (function(){
 
   exports.init = (id, state, sendDelegate) => {
     localId = id;
-    gameState.player = state.players; // Overwrite player data
+    gameState.players = state.players; // Overwrite player data
     // TODO: Create visuals for all existing player
     sendMessage = sendDelegate;
   };

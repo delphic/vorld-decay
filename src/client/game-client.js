@@ -14,7 +14,7 @@ let GameClient = module.exports = (function(){
 
   exports.init = (id, state, sendDelegate) => {
     localId = id;
-    gameState.player = state.players; // Overwrite player data
+    gameState.players = state.players; // Overwrite player data
     // TODO: Create visuals for all existing player
     sendMessage = sendDelegate;
   };
