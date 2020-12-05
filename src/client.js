@@ -31,7 +31,7 @@ window.onload = (event) => {
   let wsOpened = false;
 
   let nick = "";
-  nick = prompt("Enter you nick name", "Player");
+  // nick = prompt("Enter you nick name", "Player");
   GameClient.init(nick, sendMessage);
   // Client should start loading whatever assets are needed
   // Arguably we should wait before trying to connect to the ws server

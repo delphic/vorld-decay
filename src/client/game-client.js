@@ -2,9 +2,10 @@ let MessageType = require('../common/message-types');
 let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives')
+let Player = require('./player');
 
 // glMatrix
-let vec3 = Fury.Maths.vec3;
+let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
 
 // Game Client
 // Handles the visuals, local player movement, and interp of remote clients
@@ -28,6 +29,8 @@ let GameClient = module.exports = (function(){
   let localNick = "";
   let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
 
+  let localPlayer;
+  let players = [];
   // TODO: Player class which can take isReplica
   // TODO: List of players to update
 
@@ -65,11 +68,27 @@ let GameClient = module.exports = (function(){
     // ^^ Minimm 15 FPS - this is primarily to compenstate for alt-tab / focus loss
     elapsed /= 1000;  // Convert to seconds
 
-    // player.update(elapsed);
+    if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+      Fury.Input.requestPointerLock();
+    }
+
+    // Update Players
+    for (let i = 0, l = players.length; i < l; i++) {
+      players[i].update(elapsed);
+    }
+
+    if (localPlayer) {
+      // Update Camera
+      // TODO: If delta between camera.position and player is low just set it
+      vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      quat.copy(camera.rotation, localPlayer.lookRotation);
+
+      // TODO: Send network updates if player.inputDirty or throttle rate reached and player.stateDirty = true
+    }
 
     scene.render();
 
-    // TODO: Inform input that frame has finished (keyup / keydown calculation)
+    Fury.Input.handleFrameFinished();
 
     window.requestAnimationFrame(loop);
   };
@@ -118,14 +137,15 @@ let GameClient = module.exports = (function(){
         serverState.players[message.id] = message.player;
         if (message.id == localId) {
           localNick = message.player.nick;
-          // TODO: Spawn own player
+          localPlayer = Player.create({ id: message.id, position: vec3.clone(message.player.position), rotation: quat.create(), world: world });
+          players.push(localPlayer);
         } else {
-          // TODO: Spawn replica
+          players.push(Player.create({ id: message.id, isReplica: true, position: vec3.clone(message.player.position), rotation: quat.create(), world: world }));
         }
         break;
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
-        // TODO: Despawn player visuals
+        // TODO: Despawn player visuals and remove from player list
         break;
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
