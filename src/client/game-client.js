@@ -79,11 +79,16 @@ let GameClient = module.exports = (function(){
 
     if (localPlayer) {
       // Update Camera
-      // TODO: If delta between camera.position and player is low just set it
-      vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      if (localPlayer.snapCamera) {
+        vec3.copy(camera.position, localPlayer.position);
+        localPlayer.snapCamera = false;
+      } else {
+        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      }
       quat.copy(camera.rotation, localPlayer.lookRotation);
 
-      // TODO: Send network updates if player.inputDirty or throttle rate reached and player.stateDirty = true
+      // TODO: Send network updates if player.inputDirty or throttle rate reached
+      // and player.stateDirty = true then reset dirty flags
     }
 
     scene.render();
@@ -138,6 +143,7 @@ let GameClient = module.exports = (function(){
         if (message.id == localId) {
           localNick = message.player.nick;
           localPlayer = Player.create({ id: message.id, position: vec3.clone(message.player.position), rotation: quat.create(), world: world });
+          localPlayer.snapCamera = true;  // Don't lerp to initial position, just set it
           players.push(localPlayer);
         } else {
           players.push(Player.create({ id: message.id, isReplica: true, position: vec3.clone(message.player.position), rotation: quat.create(), world: world }));
@@ -150,9 +156,9 @@ let GameClient = module.exports = (function(){
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         // Set Player Positions (& Inputs if not local)
+        // Remember to set snapCamera to true on local player if it's a teleport
         // Remember incoming position array will be JS array (probably)
         // so *copy* across the values into vec3
-        // Equally when sending position update copy into a JS array
         break;
     }
   };

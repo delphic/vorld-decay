@@ -2251,11 +2251,16 @@ let GameClient = module.exports = (function(){
 
     if (localPlayer) {
       // Update Camera
-      // TODO: If delta between camera.position and player is low just set it
-      vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      if (localPlayer.snapCamera) {
+        vec3.copy(camera.position, localPlayer.position);
+        localPlayer.snapCamera = false;
+      } else {
+        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      }
       quat.copy(camera.rotation, localPlayer.lookRotation);
 
-      // TODO: Send network updates if player.inputDirty or throttle rate reached and player.stateDirty = true
+      // TODO: Send network updates if player.inputDirty or throttle rate reached
+      // and player.stateDirty = true then reset dirty flags
     }
 
     scene.render();
@@ -2310,6 +2315,7 @@ let GameClient = module.exports = (function(){
         if (message.id == localId) {
           localNick = message.player.nick;
           localPlayer = Player.create({ id: message.id, position: vec3.clone(message.player.position), rotation: quat.create(), world: world });
+          localPlayer.snapCamera = true;  // Don't lerp to initial position, just set it
           players.push(localPlayer);
         } else {
           players.push(Player.create({ id: message.id, isReplica: true, position: vec3.clone(message.player.position), rotation: quat.create(), world: world }));
@@ -2322,9 +2328,9 @@ let GameClient = module.exports = (function(){
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         // Set Player Positions (& Inputs if not local)
+        // Remember to set snapCamera to true on local player if it's a teleport
         // Remember incoming position array will be JS array (probably)
         // so *copy* across the values into vec3
-        // Equally when sending position update copy into a JS array
         break;
     }
   };
@@ -2379,7 +2385,7 @@ let Player = module.exports = (function() {
 
     let detectInput = function() {
       // Clear existing input
-      player.lookInput[0] = 0;  // Show gif of failing to clear :D
+      player.lookInput[0] = 0;
       player.lookInput[1] = 0;
       player.input[0] = 0;
       player.input[1] = 0;
@@ -2546,6 +2552,7 @@ let Player = module.exports = (function() {
     };
 
     // Reusable update message, also used as last input data
+    // Note JS arrays for position, rotation for easy of JSON.stringify
     player.updateMessage = {
       type: MessageType.POSITION,
       position: [0,0,0],
@@ -2594,21 +2601,22 @@ let Player = module.exports = (function() {
 
       // Rotation
       if (player.isReplica) {
-        quat.slerp(player.lookRotation, targetRotation, player.lookRotation, 0.25);
+        quat.slerp(player.rotation, targetRotation, player.rotation, 0.25);
       } else {
         Maths.quatRotate(player.lookRotation, player.lookRotation, elapsed * player.lookInput[0], Maths.vec3Y);
         let roll = getRoll(player.lookRotation);  // Note: non-atan2 version, doesn't work with atan2
         if (Math.sign(roll) == Math.sign(player.lookInput[1]) || Math.abs(roll - elapsed * player.lookInput[1]) < 0.5 * Math.PI - clampAngle) {
           quat.rotateX(player.lookRotation, player.lookRotation, elapsed * player.lookInput[1]);
         }
-        // TODO: Translate this to camera
+        quat.copy(targetRotation, player.lookRotation);
+        
+        // TODO: Set player rotation to rotation around Y and nothing else
+        // Could try using calculateYaw + setAxisAngle around Maths.vec3Y
       }
-      // TODO: Set player rotation to rotation around Y and nothing else
-      // Could try using calculateYaw + setAxisAngle around Maths.vec3Y
 
       // Calculate Local Axes from updated rotation
-      vec3.transformQuat(player.localX, Maths.vec3X, player.lookRotation);
-    	vec3.transformQuat(player.localZ, Maths.vec3Z, player.lookRotation);
+      vec3.transformQuat(player.localX, Maths.vec3X, targetRotation);
+    	vec3.transformQuat(player.localZ, Maths.vec3Z, targetRotation);
       player.localZ[1] = 0; // Wouldn't be necessary if we could use player.rotation
     	player.localX[1] = 0;
 
