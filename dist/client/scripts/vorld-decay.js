@@ -2062,7 +2062,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":17,"./client/game-client":18,"./common/game-server":22,"./common/websocket-close-codes":24}],17:[function(require,module,exports){
+},{"./client/connection":17,"./client/game-client":18,"./common/game-server":21,"./common/websocket-close-codes":23}],17:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2144,7 +2144,8 @@ var Connection = module.exports = (function() {
 },{}],18:[function(require,module,exports){
 let MessageType = require('../common/message-types');
 let Fury = require('../../fury/src/fury.js');
-let Shaders = require("./shaders");
+let Shaders = require('./shaders');
+let Primitives = require('./primitives')
 
 // glMatrix
 let vec3 = Fury.Maths.vec3;
@@ -2164,7 +2165,8 @@ let GameClient = module.exports = (function(){
     position: vec3.fromValues(0, 2, 3)
   });
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
-  let world = require('./world').create();
+  let world = require('../common/world').create();
+  let testMaterial; // Can't create this until Fury initialised
 
   let localId = -1;
   let localNick = "";
@@ -2179,7 +2181,17 @@ let GameClient = module.exports = (function(){
 
   let handleInitialServerState = (state) => {
     serverState = state;
-    // TODO: Spawn replica  for all existing players
+
+    // Load world level and instanitate scene visuals
+    var sceneBoxes = world.createLevel(serverState.level);
+    // Add world objects to render scene
+    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
+      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
+      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+      scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
+    }
+
+    // TODO: Spawn replicas for all existing players
   };
 
   let updateCanvasSize = (event) => {
@@ -2206,6 +2218,7 @@ let GameClient = module.exports = (function(){
     window.requestAnimationFrame(loop);
   };
 
+  // TODO: Separate nick setting (i.e. greet response)
   exports.init = (nick, sendDelegate) => {
     sendMessage = sendDelegate;
     localNick = nick;
@@ -2217,7 +2230,8 @@ let GameClient = module.exports = (function(){
     Fury.init("fury"); // Consider anti-alias false
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
-    let testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
+    // So now we create our materials
+    testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
     testMaterial.loadTexture = (src, callback) => {
       var image = new Image();
       image.onload = () => {
@@ -2227,9 +2241,7 @@ let GameClient = module.exports = (function(){
       image.src = src;
     };
 
-    world.createTestLevel(scene, testMaterial);
-
-    // Start loading assets - TODO: have an asset loader with a callback once done
+    // Start loading required assets - TODO: have an asset loader with a callback once done
     // Use Hestia as inspiration, it had a much better system
     testMaterial.loadTexture("/images/checkerboard.png", () => {
       lastTime = Date.now();
@@ -2242,6 +2254,8 @@ let GameClient = module.exports = (function(){
       case MessageType.ACKNOWLEDGE:
         localId = message.id;
         handleInitialServerState(message.data);
+
+        // TODO: Delay this greet until we're sure we have got nick name.
         sendMessage({ type: MessageType.GREET, nick: localNick });
         break;
       case MessageType.CONNECTED:
@@ -2270,7 +2284,7 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":23,"./shaders":20,"./world":21}],19:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":22,"../common/world":24,"./primitives":19,"./shaders":20}],19:[function(require,module,exports){
 // Helper for creating mesh primitives
 let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
@@ -2426,62 +2440,13 @@ var Shaders = module.exports = (function() {
 })();
 
 },{"../../fury/src/fury.js":4}],21:[function(require,module,exports){
-let Fury = require('../../fury/src/fury.js');
-let Primitives = require('./primitives');
-let Physics = Fury.Physics;
-let vec3 = Fury.Maths.vec3;
-
-let World = module.exports = (function() {
-  // Contains AABB of the world environment
-
-  var exports = {};
-  var prototype = {
-    addBox: function(w, h, d, x, y, z) {
-      let position = vec3.fromValues(x, y, z);
-      let size = vec3.fromValues(w, h, d);
-      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(w, h, d));
-      let box = Physics.Box.create({ center: position, size: size });
-
-      this.boxes.push(box); // Arguably we could add to scene and use object.bounds as set by the scene
-      return { mesh: mesh, position: position, static: true };
-    }
-  };
-
-  exports.create = function(params) {
-    let world = Object.create(prototype);
-
-    world.boxes = [];
-
-    // Placeholder level creation
-    world.createTestLevel = (scene, material) => {
-      // Q: Who's job is it to add visuals to the scene?
-      let addStaticBoxToScene = (w, h, d, x, y, z) => {
-        let box = world.addBox(w, h, d, x, y, z);
-        box.material = material;
-        scene.add(box);
-      };
-
-      addStaticBoxToScene(10, 4, 1, 0, 2, 5.5);   // walls
-      addStaticBoxToScene(10, 4, 1, 0, 2, -5.5);
-      addStaticBoxToScene(1, 4, 10, 5.5, 2, 0);
-      addStaticBoxToScene(1, 4, 10, -5.5, 2, 0);
-      addStaticBoxToScene(10, 1, 10, 0, -0.5, 0); // floor
-      addStaticBoxToScene(10, 1, 10, 0, 4.5, 0);  // roof
-    };
-
-    return world;
-  };
-
-  return exports;
-})();
-
-},{"../../fury/src/fury.js":4,"./primitives":19}],22:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
 // as well as informing the other clients that someone connected
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
+let World = require('./world');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -2497,12 +2462,14 @@ let GameServer = module.exports = (function() {
   let globalState = {
     players: []
   };
+  let world = World.create();
 
   exports.init = (sendDelegate, distributeDelegate) => {
     sendMessage = sendDelegate;
     distributeMessage = distributeDelegate;
 
-    // TODO: Start creating the game world baby
+    globalState.level = "test";
+    world.createLevel("test");
   };
 
   exports.onclientconnect = (id) => {
@@ -2530,15 +2497,18 @@ let GameServer = module.exports = (function() {
   };
 
   exports.onclientdisconnect = (id) => {
-    globalState.players[id] = null;
-    distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+    // Only report disconnection of players which have sent greet
+    if (globalState.players[id]) {
+      globalState.players[id] = null;
+      distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+    }
   };
 
   return exports;
 
 })();
 
-},{"./message-types":23}],23:[function(require,module,exports){
+},{"./message-types":22,"./world":24}],22:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -2548,7 +2518,7 @@ var MessageType = module.exports = {
   POSITION: "position"
 };
 
-},{}],24:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -2560,4 +2530,51 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}]},{},[16]);
+},{}],24:[function(require,module,exports){
+let Fury = require('../../fury/src/fury.js');
+let Physics = Fury.Physics; // Could *just* import physics and maths
+let vec3 = Fury.Maths.vec3;
+
+let World = module.exports = (function() {
+  // Contains AABBs of the world environment
+  // In charge of adding relevant objects to world based on level name
+
+  var exports = {};
+  var prototype = {
+    addBox: function(w, h, d, x, y, z) {
+      let position = vec3.fromValues(x, y, z);
+      let size = vec3.fromValues(w, h, d);
+      let box = Physics.Box.create({ center: position, size: size });
+      this.boxes.push(box);
+      return box;
+    }
+  };
+
+  exports.create = function(params) {
+    let world = Object.create(prototype);
+
+    world.boxes = [];
+
+    world.createLevel = (levelName) => {
+      let level = [];
+      switch(levelName) {
+        case "test":
+          // Placeholder level creation
+          level.push(world.addBox(10, 4, 1, 0, 2, 5.5));   // walls
+          level.push(world.addBox(10, 4, 1, 0, 2, -5.5));
+          level.push(world.addBox(1, 4, 10, 5.5, 2, 0));
+          level.push(world.addBox(1, 4, 10, -5.5, 2, 0));
+          level.push(world.addBox(10, 1, 10, 0, -0.5, 0)); // floor
+          level.push(world.addBox(10, 1, 10, 0, 4.5, 0));  // roof
+          break;
+      }
+      return level;
+    };
+
+    return world;
+  };
+
+  return exports;
+})();
+
+},{"../../fury/src/fury.js":4}]},{},[16]);

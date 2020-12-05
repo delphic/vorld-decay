@@ -4,6 +4,7 @@
 // as well as informing the other clients that someone connected
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
+let World = require('./world');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -19,12 +20,14 @@ let GameServer = module.exports = (function() {
   let globalState = {
     players: []
   };
+  let world = World.create();
 
   exports.init = (sendDelegate, distributeDelegate) => {
     sendMessage = sendDelegate;
     distributeMessage = distributeDelegate;
 
-    // TODO: Start creating the game world baby
+    globalState.level = "test";
+    world.createLevel("test");
   };
 
   exports.onclientconnect = (id) => {
@@ -52,8 +55,11 @@ let GameServer = module.exports = (function() {
   };
 
   exports.onclientdisconnect = (id) => {
-    globalState.players[id] = null;
-    distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+    // Only report disconnection of players which have sent greet
+    if (globalState.players[id]) {
+      globalState.players[id] = null;
+      distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+    }
   };
 
   return exports;

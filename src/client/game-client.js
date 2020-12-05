@@ -1,6 +1,7 @@
 let MessageType = require('../common/message-types');
 let Fury = require('../../fury/src/fury.js');
-let Shaders = require("./shaders");
+let Shaders = require('./shaders');
+let Primitives = require('./primitives')
 
 // glMatrix
 let vec3 = Fury.Maths.vec3;
@@ -20,7 +21,8 @@ let GameClient = module.exports = (function(){
     position: vec3.fromValues(0, 2, 3)
   });
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
-  let world = require('./world').create();
+  let world = require('../common/world').create();
+  let testMaterial; // Can't create this until Fury initialised
 
   let localId = -1;
   let localNick = "";
@@ -35,7 +37,17 @@ let GameClient = module.exports = (function(){
 
   let handleInitialServerState = (state) => {
     serverState = state;
-    // TODO: Spawn replica  for all existing players
+
+    // Load world level and instanitate scene visuals
+    var sceneBoxes = world.createLevel(serverState.level);
+    // Add world objects to render scene
+    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
+      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
+      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+      scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
+    }
+
+    // TODO: Spawn replicas for all existing players
   };
 
   let updateCanvasSize = (event) => {
@@ -62,6 +74,7 @@ let GameClient = module.exports = (function(){
     window.requestAnimationFrame(loop);
   };
 
+  // TODO: Separate nick setting (i.e. greet response)
   exports.init = (nick, sendDelegate) => {
     sendMessage = sendDelegate;
     localNick = nick;
@@ -73,7 +86,8 @@ let GameClient = module.exports = (function(){
     Fury.init("fury"); // Consider anti-alias false
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
-    let testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
+    // So now we create our materials
+    testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
     testMaterial.loadTexture = (src, callback) => {
       var image = new Image();
       image.onload = () => {
@@ -83,9 +97,7 @@ let GameClient = module.exports = (function(){
       image.src = src;
     };
 
-    world.createTestLevel(scene, testMaterial);
-
-    // Start loading assets - TODO: have an asset loader with a callback once done
+    // Start loading required assets - TODO: have an asset loader with a callback once done
     // Use Hestia as inspiration, it had a much better system
     testMaterial.loadTexture("/images/checkerboard.png", () => {
       lastTime = Date.now();
@@ -98,6 +110,8 @@ let GameClient = module.exports = (function(){
       case MessageType.ACKNOWLEDGE:
         localId = message.id;
         handleInitialServerState(message.data);
+
+        // TODO: Delay this greet until we're sure we have got nick name.
         sendMessage({ type: MessageType.GREET, nick: localNick });
         break;
       case MessageType.CONNECTED:
