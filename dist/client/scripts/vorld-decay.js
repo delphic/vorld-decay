@@ -801,6 +801,36 @@ let Maths = module.exports = (function() {
     glMatrix.vec3.transformQuat(localZ, vec3Z, q);
   };
 
+  // See https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+  // Note: They define roll as rotation around x axis, pitch around y axis, and yaw around z-axis
+  // I do not agree, roll is around z-axis, pitch around x-axis, and yaw around y-axis.
+  // Methods renamed accordingly
+
+  // I attempted to swap and rearrange some of the formula so pitch could be -pi/2 to pi/2 range
+  // and yaw would be -pi to pi but naively swapping the formula according to the apparent pattern did not work
+  // c.f. 7dfps player class for hacky work around - TODO: Fix these
+  exports.calculatePitch = function(q) {
+  	// x-axis rotation
+  	let w = q[3], x = q[0], y = q[1], z = q[2];
+  	return Math.atan2(2 * (w*x + y*z), 1 - 2 * (x*x + y*y)); // use atan and probably would get -90:90?
+  };
+
+  exports.calculateYaw = function(q) {
+  	// y-axis rotation
+  	let w = q[3], x = q[0], y = q[1], z = q[2];
+  	let sinp = 2 * (w*y - z*x);
+    if (Math.abs(sinp) >= 1) sinp = Math.sign(sinp) * (Math.PI / 2);  // Use 90 if out of range
+  	return Math.asin(sinp) // returns pi/2 -> - pi/2 range
+  };
+
+  exports.calculateRoll = function(q) {
+  	// z-axis rotation
+  	let w = q[3], x = q[0], y = q[1], z = q[2];
+  	return Math.atan2(2 * (w*z + x*y), 1 - 2 * (y*y + z*z));
+    // This seems to occasionally return PI or -PI instead of 0
+    // It does seem to be related to crossing boundaries but it's not entirely predictable
+  };
+
   exports.globalize = globalize;
 
   return exports;
@@ -2360,7 +2390,7 @@ let Player = module.exports = (function() {
   var prototype = {};
 
   // static methods
-  let getRoll = function(q) {
+  let getPitch = function(q) {
 		// Used to avoid gimbal lock
     let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
     let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
@@ -2567,7 +2597,7 @@ let Player = module.exports = (function() {
     player.world = params.world;
     player.position = params.position;
     player.rotation = params.rotation;
-    player.lookRotation = params.rotation;
+    player.lookRotation = quat.clone(params.rotation);
     player.localX = vec3.create();
     player.localZ = vec3.create();
     player.jumping = false;
@@ -2595,6 +2625,8 @@ let Player = module.exports = (function() {
     };
 
     player.update = function(elapsed) {
+      // Note: Camera looks in -z, and thus almost all this code also
+      // Uses forward = -z, we should change it to be sane and invert for the camera
       if (!player.isReplica) {
         detectInput(); // Note handles setting player.inputDirty
       } // else was set by server
@@ -2603,22 +2635,50 @@ let Player = module.exports = (function() {
       if (player.isReplica) {
         quat.slerp(player.rotation, targetRotation, player.rotation, 0.25);
       } else {
+        // This is *full* of hacks need to give this a proper review post jam
+        // and / or when it gives us problems again
+        let halfPI = Math.PI/2;
+
         Maths.quatRotate(player.lookRotation, player.lookRotation, elapsed * player.lookInput[0], Maths.vec3Y);
-        let roll = getRoll(player.lookRotation);  // Note: non-atan2 version, doesn't work with atan2
-        if (Math.sign(roll) == Math.sign(player.lookInput[1]) || Math.abs(roll - elapsed * player.lookInput[1]) < 0.5 * Math.PI - clampAngle) {
-          quat.rotateX(player.lookRotation, player.lookRotation, elapsed * player.lookInput[1]);
+        // ^^ The returned roll / pitch / yaw from these flick around a lot, don't know if this is that functions 'fault'
+        // and using another method might work better, e.g. storing pitch / yaw as inputs and then creating quat from it
+        // That would then remove all these hacks around calculating a useful pitch / yaw value
+        let pitch = getPitch(player.lookRotation);  // atan rather than atan2 as we don't want more than -90:90
+        let pitchRotation = elapsed * player.lookInput[1];
+        if (Math.sign(pitch) == -Math.sign(pitchRotation) || Math.abs(pitch - pitchRotation) < halfPI - clampAngle) {
+          quat.rotateX(player.lookRotation, player.lookRotation, pitchRotation);
         }
         quat.copy(targetRotation, player.lookRotation);
-        
-        // TODO: Set player rotation to rotation around Y and nothing else
-        // Could try using calculateYaw + setAxisAngle around Maths.vec3Y
+
+
+        vec3.transformQuat(player.localZ, Maths.vec3Z, player.lookRotation);
+        let yaw = Maths.calculateYaw(player.lookRotation);
+        if (isNaN(yaw)) { // Shouldn't be happening but again fuck it
+          yaw = Math.sign(player.localZ[0]) * halfPI;
+        }
+        // HACK: Fuck it's a jam I'm bored of rotations just make it work
+        if (player.localZ[2] < 0) {
+          if (yaw < 0) {
+            yaw = -halfPI - (halfPI + yaw);
+          } else {
+            yaw = halfPI + (halfPI - yaw);
+          }
+        }
+
+        /*
+        let radToDeg = 180 / Math.PI;
+        console.log("forward: " + player.localZ[0].toFixed(2) + ", " + player.localZ[1].toFixed(2) + ", " + player.localZ[2].toFixed(2)
+          + " roll: " + (radToDeg * Maths.calculateRoll(player.lookRotation)).toFixed(2)
+          + " pitch: " + (radToDeg * pitch).toFixed(2)
+          + " yaw: " + (radToDeg * yaw).toFixed(2));
+        */
+
+        quat.setAxisAngle(player.rotation, Maths.vec3Y, yaw);
       }
 
       // Calculate Local Axes from updated rotation
-      vec3.transformQuat(player.localX, Maths.vec3X, targetRotation);
-    	vec3.transformQuat(player.localZ, Maths.vec3Z, targetRotation);
-      player.localZ[1] = 0; // Wouldn't be necessary if we could use player.rotation
-    	player.localX[1] = 0;
+      vec3.transformQuat(player.localX, Maths.vec3X, player.rotation);
+    	vec3.transformQuat(player.localZ, Maths.vec3Z, player.rotation);
 
       // Movement
       let norm = (player.input[0] !== 0 && player.input[1] !== 0) ? (1 / Math.SQRT2) : 1;
@@ -2936,6 +2996,11 @@ let World = module.exports = (function() {
           level.push(world.addBox(1, 4, 10, -5.5, 2, 0));
           level.push(world.addBox(10, 1, 10, 0, -0.5, 0)); // floor
           level.push(world.addBox(10, 1, 10, 0, 4.5, 0));  // roof
+
+          // steps
+          level.push(world.addBox(0.5, 0.25, 0.5, 0, 0.125, -3));
+          level.push(world.addBox(0.5, 0.5, 0.5, 0, 0.25, -3.5));
+
           break;
       }
       return level;

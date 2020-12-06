@@ -33,6 +33,11 @@ let World = module.exports = (function() {
           level.push(world.addBox(1, 4, 10, -5.5, 2, 0));
           level.push(world.addBox(10, 1, 10, 0, -0.5, 0)); // floor
           level.push(world.addBox(10, 1, 10, 0, 4.5, 0));  // roof
+
+          // steps
+          level.push(world.addBox(0.5, 0.25, 0.5, 0, 0.125, -3));
+          level.push(world.addBox(0.5, 0.5, 0.5, 0, 0.25, -3.5));
+
           break;
       }
       return level;

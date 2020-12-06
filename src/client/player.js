@@ -19,7 +19,7 @@ let Player = module.exports = (function() {
   var prototype = {};
 
   // static methods
-  let getRoll = function(q) {
+  let getPitch = function(q) {
 		// Used to avoid gimbal lock
     let sinr_cosp = 2 * (q[3] * q[0] + q[1] * q[2]);
     let cosr_cosp = 1 - 2 * (q[0] * q[0] + q[1] * q[1]);
@@ -226,7 +226,7 @@ let Player = module.exports = (function() {
     player.world = params.world;
     player.position = params.position;
     player.rotation = params.rotation;
-    player.lookRotation = params.rotation;
+    player.lookRotation = quat.clone(params.rotation);
     player.localX = vec3.create();
     player.localZ = vec3.create();
     player.jumping = false;
@@ -254,6 +254,8 @@ let Player = module.exports = (function() {
     };
 
     player.update = function(elapsed) {
+      // Note: Camera looks in -z, and thus almost all this code also
+      // Uses forward = -z, we should change it to be sane and invert for the camera
       if (!player.isReplica) {
         detectInput(); // Note handles setting player.inputDirty
       } // else was set by server
@@ -262,22 +264,49 @@ let Player = module.exports = (function() {
       if (player.isReplica) {
         quat.slerp(player.rotation, targetRotation, player.rotation, 0.25);
       } else {
+        // This is *full* of hacks need to give this a proper review post jam
+        // and / or when it gives us problems again
+        let halfPI = Math.PI/2;
+
         Maths.quatRotate(player.lookRotation, player.lookRotation, elapsed * player.lookInput[0], Maths.vec3Y);
-        let roll = getRoll(player.lookRotation);  // Note: non-atan2 version, doesn't work with atan2
-        if (Math.sign(roll) == Math.sign(player.lookInput[1]) || Math.abs(roll - elapsed * player.lookInput[1]) < 0.5 * Math.PI - clampAngle) {
-          quat.rotateX(player.lookRotation, player.lookRotation, elapsed * player.lookInput[1]);
+        // ^^ The returned roll / pitch / yaw from these flick around a lot, don't know if this is that functions 'fault'
+        // and using another method might work better, e.g. storing pitch / yaw as inputs and then creating quat from it
+        // That would then remove all these hacks around calculating a useful pitch / yaw value
+        let pitch = getPitch(player.lookRotation);  // atan rather than atan2 as we don't want more than -90:90 range
+        let pitchRotation = elapsed * player.lookInput[1];
+        if (Math.sign(pitch) == -Math.sign(pitchRotation) || Math.abs(pitch - pitchRotation) < halfPI - clampAngle) {
+          quat.rotateX(player.lookRotation, player.lookRotation, pitchRotation);
         }
         quat.copy(targetRotation, player.lookRotation);
-        
-        // TODO: Set player rotation to rotation around Y and nothing else
-        // Could try using calculateYaw + setAxisAngle around Maths.vec3Y
+
+        vec3.transformQuat(player.localZ, Maths.vec3Z, player.lookRotation);
+        let yaw = Maths.calculateYaw(player.lookRotation);
+        if (isNaN(yaw)) { // Shouldn't be happening but again fuck it
+          yaw = Math.sign(player.localZ[0]) * halfPI;
+        }
+        // HACK: Fuck it's a jam I'm bored of rotations just make it work
+        if (player.localZ[2] < 0) {
+          if (yaw < 0) {
+            yaw = -halfPI - (halfPI + yaw);
+          } else {
+            yaw = halfPI + (halfPI - yaw);
+          }
+        }
+        quat.setAxisAngle(player.rotation, Maths.vec3Y, yaw);
+
+        /*
+        let radToDeg = 180 / Math.PI;
+        console.log("forward: " + player.localZ[0].toFixed(2) + ", " + player.localZ[1].toFixed(2) + ", " + player.localZ[2].toFixed(2)
+          + " roll: " + (radToDeg * Maths.calculateRoll(player.lookRotation)).toFixed(2)
+          + " pitch: " + (radToDeg * pitch).toFixed(2)
+          + " yaw: " + (radToDeg * yaw).toFixed(2));
+        */
+
       }
 
       // Calculate Local Axes from updated rotation
-      vec3.transformQuat(player.localX, Maths.vec3X, targetRotation);
-    	vec3.transformQuat(player.localZ, Maths.vec3Z, targetRotation);
-      player.localZ[1] = 0; // Wouldn't be necessary if we could use player.rotation
-    	player.localX[1] = 0;
+      vec3.transformQuat(player.localX, Maths.vec3X, player.rotation);
+    	vec3.transformQuat(player.localZ, Maths.vec3Z, player.rotation);
 
       // Movement
       let norm = (player.input[0] !== 0 && player.input[1] !== 0) ? (1 / Math.SQRT2) : 1;
