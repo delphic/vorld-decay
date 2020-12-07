@@ -45,7 +45,7 @@ let GameServer = module.exports = (function() {
       case MessageType.POSITION:
         message.id = id;
         globalState.players[id].position = message.position;
-        distributeMessage(id, message);
+        distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz
         break;
       default:
         message.id = id;

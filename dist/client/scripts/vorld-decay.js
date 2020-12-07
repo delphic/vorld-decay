@@ -2120,7 +2120,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":17,"./client/game-client":18,"./common/game-server":23,"./common/websocket-close-codes":25}],17:[function(require,module,exports){
+},{"./client/connection":17,"./client/game-client":18,"./common/game-server":24,"./common/websocket-close-codes":29}],17:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2204,10 +2204,9 @@ var Connection = module.exports = (function() {
 },{}],18:[function(require,module,exports){
 let MessageType = require('../common/message-types');
 let Fury = require('../../fury/src/fury.js');
-let Shaders = require('./shaders');
-let Primitives = require('./primitives')
 let Player = require('./player');
 let PlayerVisuals = require('./player-visuals');
+let WorldVisuals = require('./world-visuals');
 
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
@@ -2228,7 +2227,6 @@ let GameClient = module.exports = (function(){
   });
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
   let world = require('../common/world').create();
-  let testMaterial; // Can't create this until Fury initialised
 
   let localId = -1;
   let localNick = "";
@@ -2259,23 +2257,9 @@ let GameClient = module.exports = (function(){
 
     Fury.init("fury"); // Consider anti-alias false
 
+    // Start loading required assets
     PlayerVisuals.init();
-
-    // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
-    // So now we create our materials
-    testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
-    testMaterial.loadTexture = (src, callback) => {
-      var image = new Image();
-      image.onload = () => {
-        testMaterial.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
-        callback();
-      };
-      image.src = src;
-    };
-
-    // Start loading required assets - TODO: have an asset loader with a callback once done
-    // Use Hestia as inspiration, it had a much better system
-    testMaterial.loadTexture("/images/checkerboard.png", () => {
+    WorldVisuals.init(() => {
       lastTime = Date.now();
       window.requestAnimationFrame(loop);
     });
@@ -2363,13 +2347,12 @@ let GameClient = module.exports = (function(){
     serverState = state;
 
     // Load world level and instanitate scene visuals
-    var sceneBoxes = world.createLevel(serverState.level);
+    var level = world.createLevel(serverState.level);
+
     // Add world objects to render scene
-    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
-      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
-      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-      sceneBoxes.visuals = scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
-    }
+    WorldVisuals.generateVisuals(level, world.vorld, scene, () => {
+      // World visuals instanitated - could defer player spawn until this point
+    });
 
     // Spawn replicas for all existing players
     for (let i = 0, l = state.players.length; i < l; i++) {
@@ -2435,7 +2418,7 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":24,"../common/world":26,"./player":20,"./player-visuals":19,"./primitives":21,"./shaders":22}],19:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":25,"../common/world":30,"./player":20,"./player-visuals":19,"./world-visuals":23}],19:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
@@ -2833,7 +2816,7 @@ let Player = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":24}],21:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":25}],21:[function(require,module,exports){
 // Helper for creating mesh primitives
 let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
@@ -3020,10 +3003,227 @@ var Shaders = module.exports = (function() {
    	 }
    };
 
+  exports.Voxel = {
+      vsSource: [
+        "#version 300 es",
+        "in vec3 aVertexPosition;",
+        "in vec2 aTextureCoord;",
+        "in vec3 aVertexNormal;",
+        "in float aTileIndex;",
+
+        "uniform vec3 uLightingDirection;",
+        "uniform mat4 uMVMatrix;",
+        "uniform mat4 uPMatrix;",
+
+        // "out vec4 vWorldPosition;",
+        "out vec2 vTextureCoord;",
+        "out vec3 vNormal;",
+        "out vec3 vViewSpacePosition;",
+        "out float vLightWeight;",
+        "out float vTileIndex;",
+
+        "void main(void) {",
+          "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+          "vTextureCoord = aTextureCoord;",
+          "vNormal = aVertexNormal;",
+          "vTileIndex = aTileIndex;",
+
+          // Greedy Meshing - UV generation - artifacts at seams
+          // Normally would mulitply this by the world / model matrix but as models
+          // are all axis aligned and we're going to be using frac value anyway, it's unnecessary
+          // "vWorldPosition = vec4(aVertexPosition + vec3(0.5, 0.5, 0.5), 1.0);",
+
+          // Lighting Direction: vec3(-1.0,2.0,1.0)
+
+          "vLightWeight = 0.5 * max(dot(aVertexNormal, normalize(uLightingDirection)), 0.0);",
+
+          "vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+        "}"].join('\n'),
+      fsSource: [
+        "#version 300 es",
+        "precision highp float;",
+        "precision highp sampler2DArray;",
+
+        "in vec2 vTextureCoord;",
+        //"in vec4 vWorldPosition;",
+        "in vec3 vNormal;",
+        "in vec3 vViewSpacePosition;",
+        "in float vLightWeight;",
+        "in float vTileIndex;",
+
+        "uniform sampler2DArray uSampler;",
+        "uniform vec3 uLightColor;",
+        "uniform vec3 uAmbientColor;",
+
+        "uniform vec3 uFogColor;",
+        "uniform float uFogDensity;",
+
+        "out vec4 fragColor;",
+
+        "void main(void) {",
+            //"vec3 pos = fract(vWorldPosition.xyz);",
+
+            //"vec2 uv = abs(vNormal.x) * pos.zy + abs(vNormal.y) * pos.xz + abs(vNormal.z) * pos.xy;",
+            //"float tileIndex = 8.0 - floor(vTextureCoord.s);",
+
+            "vec4 color = texture(uSampler, vec3(vTextureCoord, vTileIndex));",
+            "vec4 litColor = vec4(((0.5 * uAmbientColor) + (vLightWeight * uLightColor)) * color.rgb, color.a);",
+
+            "#define LOG2 1.442695",
+
+            "float fogDistance = length(vViewSpacePosition);",
+            "float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
+            "fogAmount = clamp(fogAmount, 0.0, 1.0);",
+
+            "fragColor = mix(litColor, vec4(uFogColor, 1.0), fogAmount);",
+        "}"].join('\n'),
+      attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord", "aTileIndex" ],
+      uniformNames: ["uLightingDirection", "uMVMatrix", "uPMatrix", "uSampler", "uLightColor", "uAmbientColor", "uFogColor", "uFogDensity" ],
+      textureUniformNames: [ "uSampler" ],
+      pMatrixUniformName: "uPMatrix",
+      mvMatrixUniformName: "uMVMatrix",
+      bindMaterial: function(material) {
+        // HACK: Should have a cleaner way to do this
+        // Arguably some of these are scene based variables not material,
+        // should we pass scene details in?
+        // Or just add sceneLighting property to material
+        this.setUniformVector3("uLightingDirection", material.lightDir);
+        this.setUniformVector3("uLightColor", material.lightColor);
+        this.setUniformVector3("uAmbientColor", material.ambientColor);
+        this.setUniformVector3("uFogColor", material.fogColor);
+        this.setUniformFloat("uFogDensity", material.fogDensity);
+
+        this.enableAttribute("aLightingDirection");
+        this.enableAttribute("aVertexPosition");
+        this.enableAttribute("aTextureCoord");
+        this.enableAttribute("aVertexNormal");
+        this.enableAttribute("aTileIndex");
+      },
+      bindBuffers: function(mesh) {
+        this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+        this.setAttribute("aTextureCoord", mesh.textureBuffer);
+        this.setAttribute("aVertexNormal", mesh.normalBuffer);
+        this.setAttribute("aTileIndex", mesh.tileBuffer);
+        this.setIndexedAttribute(mesh.indexBuffer);
+      }
+    };
+
   return exports;
 })();
 
 },{"../../fury/src/fury.js":4}],23:[function(require,module,exports){
+let Fury = require('../../fury/src/fury.js');
+let Shaders = require('./shaders');
+let Primitives = require('./primitives');
+let vec3 = Fury.Maths.vec3;
+
+let WorldVisuals = module.exports = (function() {
+  let exports = {};
+
+  let atlasMaterial, debugMaterial;
+  let chunkObjects = [];
+
+  exports.init = (callback) => {
+    // TODO: have an asset loader with a combined callback once done
+    // Use Hestia as inspiration, it had a much better system
+    let itemsToLoad = 2;
+    let loadCallback = () => {
+      itemsToLoad -= 1;
+      if (itemsToLoad == 0) {
+        callback();
+      }
+    };
+
+    // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
+    // So this init needs to be called after Fury.init
+    atlasMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.Voxel) });
+    atlasMaterial.loadTexture = (src, cb) => {
+      let image = new Image();
+      image.onload = () => {
+        let texture = Fury.Renderer.createTextureArray(image, 64, 64, 13, "pixel", true);
+        // TODO: 13 is based on vorld config, so should actually base it off that
+      	atlasMaterial.textures["uSampler"] = texture;
+      	atlasMaterial.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1
+      	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
+      	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
+      	atlasMaterial.fogColor = vec3.fromValues(0, 0, 0);
+      	atlasMaterial.fogDensity = 0.25;  // TODO: Expose Variables for tweaking please
+        cb();
+      };
+      image.src = src;
+    };
+
+    debugMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
+    debugMaterial.loadTexture = (src, cb) => {
+      let image = new Image();
+      image.onload = () => {
+        debugMaterial.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
+        cb();
+      };
+      image.src = src;
+    };
+
+    atlasMaterial.loadTexture("/images/atlas_array.png", loadCallback);
+    debugMaterial.loadTexture("/images/checkerboard.png", loadCallback);
+  };
+
+  exports.generateVisuals = (level, vorld, scene, callback) => {
+    // Debug meshes
+    if (level) {
+      for (let i = 0, l = level.length; i < l; i++) {
+        let meshData = Primitives.createCuboidMesh(level[i].size[0], level[i].size[1], level[i].size[2]);
+        let mesh = Fury.Mesh.create(meshData);
+        // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+        level.visuals = scene.add({
+          mesh: mesh,
+          position: level[i].center,
+          static: true,
+          material: debugMaterial
+        });
+      }
+    }
+
+    if (!vorld) {
+      return;
+    }
+
+    // "Generating Meshes"
+    // $("#progressBarInner").width("0%");
+
+  	var worker = new Worker('./scripts/mesher-worker.js');
+  	worker.onmessage = function(e) {
+  		if (e.data.mesh) {
+  			var mesh = Fury.Mesh.create(e.data.mesh);
+  			mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
+        // ^^ TODO: have some way of attaching additional generic buffer info into
+        // mesh data, so we don't have to do this step manually
+  			var chunkObject = scene.add({
+          static: true,
+          mesh: mesh,
+          material: atlasMaterial,
+          position: vec3.clone(e.data.offset)
+        });
+  			chunkObjects.push(chunkObject);
+  		}
+  		if (e.data.progress !== undefined) {
+  			// $("#progressBarInner").width((e.data.progress * 100) + "%");
+  		}
+  		if (e.data.complete) {
+  			// $("#progressDisplay").hide();
+        if (callback) {
+            callback();
+        }
+  		}
+  	};
+  	worker.postMessage({
+  		chunkData: vorld
+  	});
+  };
+
+  return exports;
+})();
+
+},{"../../fury/src/fury.js":4,"./primitives":21,"./shaders":22}],24:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -3071,7 +3271,7 @@ let GameServer = module.exports = (function() {
       case MessageType.POSITION:
         message.id = id;
         globalState.players[id].position = message.position;
-        distributeMessage(id, message);
+        distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz
         break;
       default:
         message.id = id;
@@ -3092,7 +3292,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"./message-types":24,"./world":26}],24:[function(require,module,exports){
+},{"./message-types":25,"./world":30}],25:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -3102,7 +3302,296 @@ var MessageType = module.exports = {
   POSITION: "position"
 };
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
+var Chunk = module.exports = (function() {
+  var exports = {};
+  exports.addBlock = function(chunk, i, j, k, block) {
+    chunk.blocks[i + chunk.size*j + chunk.size*chunk.size*k] = block;
+    if (block == 0) {
+      chunk.blockRotations[i + chunk.size*j + chunk.size*chunk.size*k] = null;
+    }
+  };
+  exports.addBlockRotation = function(chunk, i, j, k, rotation) {
+    chunk.blockRotations[i + chunk.size*j + chunk.size*chunk.size*k] = rotation;
+  };
+  exports.getBlock = function(chunk, i, j, k) {
+    if(i < 0 || j < 0 || k < 0 || i >= chunk.size || j >= chunk.size || k >= chunk.size) {
+      return null;
+    }
+    return chunk.blocks[i + chunk.size*j + chunk.size*chunk.size*k];
+  };
+  exports.getBlockRotation = function(chunk, i, j, k) {
+    if(i < 0 || j < 0 || k < 0 || i >= chunk.size || j >= chunk.size || k >= chunk.size) {
+      return null;
+    }
+    return chunk.blockRotations[i + chunk.size*j + chunk.size*chunk.size*k];
+  };
+  exports.create = function(parameters) {
+    // TODO: Convert to views on array buffer for memory improvement
+    var chunk = {};
+    if (parameters && parameters.size) {
+      chunk.size = parameters.size;
+    } else {
+      chunk.size = 32;
+    }
+    // TODO: Use UINT array?
+    if (parameters && parameters.blocks) {
+      chunk.blocks = parameters.blocks;
+    } else {
+      chunk.blocks = [];
+    }
+    if (parameters && parameters.blockRotations) {
+      chunk.blockRotations = parameters.blockRotations;
+    } else {
+      chunk.blockRotations = [];
+    }
+    // For Rotations we should bit mask some uints to pack up and right into it... but for now just a value for vertical flip
+    return chunk;
+  };
+  return exports;
+})();
+
+},{}],27:[function(require,module,exports){
+// TODO: This should be actual config not a class ?
+var VorldConfig = module.exports = (function() {
+  var exports = {};
+  var blockIds = exports.BlockIds = {
+      AIR: 0,
+      STONE: 1,
+      SOIL: 2,
+      GRASS: 3,
+      WOOD: 4,
+      LEAVES: 5,
+      WATER: 6,
+      BEDROCK: 7,
+      STONE_BLOCKS: 8,
+      PLANKS: 9,
+      HALF_STONE_BLOCKS: 10,
+  };
+
+  exports.isBlockSolid = function(block) {
+    if (block > 0 && block != blockIds.HALF_STONE_BLOCKS) {
+      return true;
+    }
+    return false;
+  };
+
+  exports.isHalfBlock = function(block) {
+    return block == blockIds.HALF_STONE_BLOCKS;
+  };
+
+  exports.getBlockType = function(config, value) {
+    // TODO: Return id instead of string
+    if(value < config.thresholds[0]) {
+  		return blockIds.AIR;
+    }
+    if(value < config.thresholds[1]) {
+      return blockIds.SOIL;
+    }
+    return blockIds.STONE;
+  };
+  exports.getTransformedBlockType = function(block, verticallyAdjacent) {
+    if(block == blockIds.SOIL && !verticallyAdjacent) {
+      return blockIds.GRASS;
+    }
+    return block;
+  };
+  exports.getShapingFunction = function(config) {
+    // Would be cute to take a string you could just eval
+    if (config.shapingFunction == "gaussian") {
+        let a = config.amplitude, sdx = config.sdx, sdz = config.sdz, x0 = 0, z0 = 0;
+        return function(x, y, z) {
+            let fxy = a * Math.exp(-((((x - x0) * (x - x0)) / (2 * sdx * sdx)) + (((z -z0) * (z - z0)) / (2 * sdz * sdz))));
+            return Math.max(0, 1 + (fxy - y) / config.yDenominator);
+        };
+    } else if (config.shapingFunction == "negative_y") {
+        return function(x, y, z) {
+            return (config.yOffset - y) / config.yDenominator;
+        };
+    } else if (config.shapingFunction == "inverse_y") {
+        return function(x, y, z) {
+            return 1 / (config.adjustmentFactor * (y + config.yOffset));
+        };
+    } else {
+        return function(x, y, z) {
+            return 1;
+        };
+    }
+  };
+  exports.getAtlasInfo = function() {
+    // TODO: Build from parameters, perhaps an init from other methods
+    // We have atlas builder maybe should move that there?
+    var atlas = {};
+    atlas.tileSize = 64;
+    atlas.arraySize = 13;
+    atlas.tileIndices = [];
+    atlas.tileIndices[blockIds.GRASS] = { side: 1, top: 0, bottom: 2 };
+    atlas.tileIndices[blockIds.SOIL] = { side: 2, top: 2, bottom: 2 };
+    atlas.tileIndices[blockIds.STONE] = { side: 5, top: 5, bottom: 5 };
+    atlas.tileIndices[blockIds.STONE_BLOCKS] = { side: 4, top: 4, bottom: 4 };
+    atlas.tileIndices[blockIds.HALF_STONE_BLOCKS] = { side: 4, top: 4, bottom: 4 };
+    atlas.tileIndices[blockIds.BEDROCK] = { side: 6, top: 6, bottom: 6 };
+    atlas.tileIndices[blockIds.WOOD] = { side: 8, top: 7, bottom: 7 };
+    atlas.tileIndices[blockIds.PLANKS] = { side: 10, top: 9, bottom: 9 };
+    atlas.tileIndices[blockIds.LEAVES] = { side: 11, top: 11, bottom: 11 };
+    atlas.tileIndices[blockIds.WATER] = { side: 12, top: 12, bottom: 12 };
+    return atlas;
+  };
+  return exports;
+})();
+
+},{}],28:[function(require,module,exports){
+let Chunk = require('./chunk');
+
+let Vorld = module.exports = (function() {
+  var exports = {};
+
+  exports.addChunk = function(vorld, chunk, i, j, k) {
+    vorld.chunks[i+"_"+j+"_"+k] = chunk;
+    chunk.indices = [i, j, k];
+  };
+  exports.getChunk = function(vorld, i, j, k) {
+    var key = i+"_"+j+"_"+k;
+    if (vorld.chunks[key]) {
+        return vorld.chunks[key];
+    }
+    return null;
+  };
+
+  exports.addBlock = function(vorld, x, y, z, block) {
+    var size = vorld.chunkSize;
+    var chunkI = Math.floor(x / size),
+      chunkJ = Math.floor(y / size),
+      chunkK = Math.floor(z / size);
+    var blockI = x - (chunkI * size),
+      blockJ = y - (chunkJ * size),
+      blockK = z - (chunkK * size);
+    var chunk = exports.getChunk(vorld, chunkI, chunkJ, chunkK);
+    if (!chunk) {
+      chunk = Chunk.create({ size: vorld.chunkSize });
+      Vorld.addChunk(vorld, chunk, chunkI, chunkJ, chunkK);
+    }
+    Chunk.addBlock(chunk, blockI, blockJ, blockK, block);
+  };
+  exports.addBlockRotation = function(vorld, x, y, z, rotation) {
+    var size = vorld.chunkSize;
+    var chunkI = Math.floor(x / size),
+      chunkJ = Math.floor(y / size),
+      chunkK = Math.floor(z / size);
+    var blockI = x - (chunkI * size),
+      blockJ = y - (chunkJ * size),
+      blockK = z - (chunkK * size);
+    var chunk = exports.getChunk(vorld, chunkI, chunkJ, chunkK);
+    if (!chunk) {
+      chunk = Chunk.create({ size: vorld.chunkSize });
+      Vorld.addChunk(vorld, chunk, chunkI, chunkJ, chunkK);
+    }
+    Chunk.addBlockRotation(chunk, blockI, blockJ, blockK, rotation);
+  };
+
+  exports.getBlock = function(vorld, x, y, z) {
+    var size = vorld.chunkSize;
+    var chunkI = Math.floor(x / size),
+      chunkJ = Math.floor(y / size),
+      chunkK = Math.floor(z / size);
+    var blockI = x - (chunkI * size),
+      blockJ = y - (chunkJ * size),
+      blockK = z - (chunkK * size);
+    return exports.getBlockByIndex(vorld, blockI, blockJ, blockK, chunkI, chunkJ, chunkK);
+  };
+  exports.getBlockRotation = function(vorld, x, y, z) {
+    var size = vorld.chunkSize;
+    var chunkI = Math.floor(x / size),
+      chunkJ = Math.floor(y / size),
+      chunkK = Math.floor(z / size);
+    var blockI = x - (chunkI * size),
+      blockJ = y - (chunkJ * size),
+      blockK = z - (chunkK * size);
+    return exports.getBlockRotationByIndex(vorld, blockI, blockJ, blockK, chunkI, chunkJ, chunkK);
+  };
+
+  exports.getBlockByIndex = function(vorld, blockI, blockJ, blockK, chunkI, chunkJ, chunkK) {
+    // Assumes you won't go out by more than chunkSize
+    if (blockI >= vorld.chunkSize) {
+      blockI = blockI - vorld.chunkSize;
+      chunkI += 1;
+    } else if (blockI < 0) {
+      blockI = vorld.chunkSize + blockI;
+      chunkI -= 1;
+    }
+    if (blockJ >= vorld.chunkSize) {
+      blockJ = blockJ - vorld.chunkSize;
+      chunkJ += 1;
+    } else if (blockJ < 0) {
+      blockJ = vorld.chunkSize + blockJ;
+      chunkJ -= 1;
+    }
+    if (blockK >= vorld.chunkSize) {
+      blockK = blockK - vorld.chunkSize;
+      chunkK += 1;
+    } else if (blockK < 0) {
+      blockK = vorld.chunkSize + blockK;
+      chunkK -= 1;
+    }
+
+    var chunk = Vorld.getChunk(vorld, chunkI, chunkJ, chunkK);
+    if (chunk) {
+      return Chunk.getBlock(chunk, blockI, blockJ, blockK);
+    }
+    return null;
+  };
+  exports.getBlockRotationByIndex = function(vorld, blockI, blockJ, blockK, chunkI, chunkJ, chunkK) {
+    // Assumes you won't go out by more than chunkSize
+    if (blockI >= vorld.chunkSize) {
+      blockI = blockI - vorld.chunkSize;
+      chunkI += 1;
+    } else if (blockI < 0) {
+      blockI = vorld.chunkSize + blockI;
+      chunkI -= 1;
+    }
+    if (blockJ >= vorld.chunkSize) {
+      blockJ = blockJ - vorld.chunkSize;
+      chunkJ += 1;
+    } else if (blockJ < 0) {
+      blockJ = vorld.chunkSize + blockJ;
+      chunkJ -= 1;
+    }
+    if (blockK >= vorld.chunkSize) {
+      blockK = blockK - vorld.chunkSize;
+      chunkK += 1;
+    } else if (blockK < 0) {
+      blockK = vorld.chunkSize + blockK;
+      chunkK -= 1;
+    }
+
+    var chunk = Vorld.getChunk(vorld, chunkI, chunkJ, chunkK);
+    if (chunk) {
+      return Chunk.getBlockRotation(chunk, blockI, blockJ, blockK);
+    }
+    return null;
+  };
+
+  exports.create = function(parameters) {
+    var vorld = {};
+    if (parameters && parameters.chunkSize) {
+      vorld.chunkSize = parameters.chunkSize;
+    } else {
+      vorld.chunkSize = 32;
+    }
+    vorld.chunks = {};
+    if (parameters && parameters.chunks) {
+      var keys = Object.keys(parameters.chunks);
+      for(var i = 0, l = keys.length; i < l; i++) {
+        vorld.chunks[keys[i]] = Chunk.create(parameters.chunks[keys[i]]);
+      }
+    }
+    return vorld;
+  };
+
+  return exports;
+})();
+
+},{"./chunk":26}],29:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -3114,21 +3603,24 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],26:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let vec3 = Fury.Maths.vec3;
+let Vorld = require('./vorld/vorld');
+let VorldConfig = require('./vorld/config');
 
 let World = module.exports = (function() {
   // Contains AABBs of the world environment
+  // and more importantly the 'vorld' which is the voxel data
   // In charge of adding relevant objects to world based on level name
 
   var exports = {};
   var prototype = {
-    addBox: function(w, h, d, x, y, z) {
-      let position = vec3.fromValues(x, y, z);
-      let size = vec3.fromValues(w, h, d);
-      let box = Physics.Box.create({ center: position, size: size });
+    addBox: function(xMin, xMax, yMin, yMax, zMin, zMax) {
+      let min = vec3.fromValues(xMin, yMin, zMin);
+      let max = vec3.fromValues(xMax, yMax, zMax);
+      let box = Physics.Box.create({ min: min, max: max });
       this.boxes.push(box);
       return box;
     },
@@ -3144,24 +3636,57 @@ let World = module.exports = (function() {
 
   exports.create = function(params) {
     let world = Object.create(prototype);
+    // We may want one of these *per* section
+    let vorld = Vorld.create({ chunkSize: 32 });
 
+    world.vorld = vorld;
     world.boxes = [];
+
+    let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
+      for (let x = xMin; x <= xMax; x++) {
+        for (let z = zMin; z <= zMax; z++) {
+          for (let y = yMin; y <= yMax; y++) {
+            Vorld.addBlock(vorld, x, y, z, block);
+          }
+        }
+      }
+    };
 
     world.createLevel = (levelName) => {
       let level = [];
       switch(levelName) {
         case "test":
-          // Placeholder level creation
-          level.push(world.addBox(10, 4, 1, 0, 2, 5.5));   // walls
-          level.push(world.addBox(10, 4, 1, 0, 2, -5.5));
-          level.push(world.addBox(1, 4, 10, 5.5, 2, 0));
-          level.push(world.addBox(1, 4, 10, -5.5, 2, 0));
-          level.push(world.addBox(10, 1, 10, 0, -0.5, 0)); // floor
-          level.push(world.addBox(10, 1, 10, 0, 4.5, 0));  // roof
+          let block = VorldConfig.BlockIds.STONE_BLOCKS;
 
-          // steps
-          level.push(world.addBox(0.5, 0.25, 0.5, 0, 0.125, -3));
-          level.push(world.addBox(0.5, 0.5, 0.5, 0, 0.25, -3.5));
+          // Placeholder level creation
+          // Create AABBs manually until we get collision working against chunks
+          // NOTE: Voxels are at center of their coordinates... not sure how wise this is really.
+
+          // walls
+          world.addBox(-4,5, 0,4, 5,6);
+          fill(-4,4, 0,3, 5,5, block);
+
+          world.addBox(-4,5, 0,4, -5,-4);
+          fill(-4,4, 0,3, -5,-5, block);
+
+          world.addBox(5,6, 0,4, -4,5);
+          fill(5,5, 0,3, -4,4, block);
+
+          world.addBox(-5,-4, 0,4, -4,5);
+          fill(-5,-5, 0,3, -4,4, block);
+
+          world.addBox(-4,5, -1,0, -4,5); // floor
+          fill(-4,4, -1,-1, -4,4, block);
+
+          world.addBox(-4,5, 4,5, -4,5);  // roof
+          fill(-4,4, 4,4, -4,4, block);
+
+          world.addBox(0,1,0,1,0,1);  // Test Block
+          fill(0,0, 0,0, 0,0, block);
+
+          // test steps
+          // level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
+          // level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
 
           break;
       }
@@ -3174,4 +3699,4 @@ let World = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}]},{},[16]);
+},{"../../fury/src/fury.js":4,"./vorld/config":27,"./vorld/vorld":28}]},{},[16]);

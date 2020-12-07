@@ -1,9 +1,8 @@
 let MessageType = require('../common/message-types');
 let Fury = require('../../fury/src/fury.js');
-let Shaders = require('./shaders');
-let Primitives = require('./primitives')
 let Player = require('./player');
 let PlayerVisuals = require('./player-visuals');
+let WorldVisuals = require('./world-visuals');
 
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
@@ -24,7 +23,6 @@ let GameClient = module.exports = (function(){
   });
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
   let world = require('../common/world').create();
-  let testMaterial; // Can't create this until Fury initialised
 
   let localId = -1;
   let localNick = "";
@@ -55,23 +53,9 @@ let GameClient = module.exports = (function(){
 
     Fury.init("fury"); // Consider anti-alias false
 
+    // Start loading required assets
     PlayerVisuals.init();
-
-    // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
-    // So now we create our materials
-    testMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
-    testMaterial.loadTexture = (src, callback) => {
-      var image = new Image();
-      image.onload = () => {
-        testMaterial.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
-        callback();
-      };
-      image.src = src;
-    };
-
-    // Start loading required assets - TODO: have an asset loader with a callback once done
-    // Use Hestia as inspiration, it had a much better system
-    testMaterial.loadTexture("/images/checkerboard.png", () => {
+    WorldVisuals.init(() => {
       lastTime = Date.now();
       window.requestAnimationFrame(loop);
     });
@@ -159,13 +143,12 @@ let GameClient = module.exports = (function(){
     serverState = state;
 
     // Load world level and instanitate scene visuals
-    var sceneBoxes = world.createLevel(serverState.level);
+    var level = world.createLevel(serverState.level);
+
     // Add world objects to render scene
-    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
-      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
-      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-      sceneBoxes.visuals = scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
-    }
+    WorldVisuals.generateVisuals(level, world.vorld, scene, () => {
+      // World visuals instanitated - could defer player spawn until this point
+    });
 
     // Spawn replicas for all existing players
     for (let i = 0, l = state.players.length; i < l; i++) {

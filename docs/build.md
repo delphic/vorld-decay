@@ -3,6 +3,12 @@ Client HTML/CSS is already contained within `dist/client`
 
 ## Full Build
 `browserify src/client.js -o dist/client/scripts/vorld-decay.js`
+`browserify src/client/vorld/mesher-worker.js -o dist/client/scripts/mesher-worker.js`
+
+Note workers use browserify instead of import scripts to bundle js, so no need
+to copy dependencies of the worker as well. However this is a little dangerous
+as it's harder to deal with the caching of workers. Version numbers are probably in
+order.
 
 Copy the following files and directories to `dist/`
 * `src/server.js`
@@ -13,6 +19,7 @@ Note server.js needs to go in dist root in order for fury require lookup to work
 ## Local Testing
 Run server.js from `src/` folder.
 Run `watchify src/client.js -o dist/client/scripts/vorld-decay.js`
+Run `watchify src/client/vorld/mesher-worker.js -o dist/client/scripts/mesher-worker.js`
 
 ## Deployment
 Set version numbers on generated client js and update src links in html.
