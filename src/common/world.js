@@ -14,6 +14,14 @@ let World = module.exports = (function() {
       let box = Physics.Box.create({ center: position, size: size });
       this.boxes.push(box);
       return box;
+    },
+    getIntersections: function(results, box) {
+      results.length = 0;
+      for (let i = 0, l = this.boxes.length; i < l; i++) {
+        if (Physics.Box.intersect(box, this.boxes[i])) {
+          results.push(box);
+        }
+      }
     }
   };
 

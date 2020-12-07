@@ -2120,7 +2120,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":17,"./client/game-client":18,"./common/game-server":22,"./common/websocket-close-codes":24}],17:[function(require,module,exports){
+},{"./client/connection":17,"./client/game-client":18,"./common/game-server":23,"./common/websocket-close-codes":25}],17:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2205,6 +2205,7 @@ let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives')
 let Player = require('./player');
+let PlayerVisuals = require('./player-visuals');
 
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
@@ -2232,27 +2233,10 @@ let GameClient = module.exports = (function(){
   let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
 
   let localPlayer;
-  let players = [];
-  // TODO: Player class which can take isReplica
-  // TODO: List of players to update
+  let players = []; // Note currently index != id
 
   let serverState = {
     players: [] // Contains id, position, nick
-  };
-
-  let handleInitialServerState = (state) => {
-    serverState = state;
-
-    // Load world level and instanitate scene visuals
-    var sceneBoxes = world.createLevel(serverState.level);
-    // Add world objects to render scene
-    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
-      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
-      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-      scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
-    }
-
-    // TODO: Spawn replicas for all existing players
   };
 
   let updateCanvasSize = (event) => {
@@ -2260,44 +2244,6 @@ let GameClient = module.exports = (function(){
   	glCanvas.height = resolutionFactor * glCanvas.clientHeight;
   	cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
   	if (camera && camera.ratio) camera.ratio = cameraRatio;
-  };
-
-  let lastTime = 0;
-  let loop = () => {
-    let elapsed = Date.now() - lastTime;
-    lastTime += elapsed;
-    if (elapsed > 66) elapsed = 66;
-    // ^^ Minimm 15 FPS - this is primarily to compenstate for alt-tab / focus loss
-    elapsed /= 1000;  // Convert to seconds
-
-    if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
-      Fury.Input.requestPointerLock();
-    }
-
-    // Update Players
-    for (let i = 0, l = players.length; i < l; i++) {
-      players[i].update(elapsed);
-    }
-
-    if (localPlayer) {
-      // Update Camera
-      if (localPlayer.snapCamera) {
-        vec3.copy(camera.position, localPlayer.position);
-        localPlayer.snapCamera = false;
-      } else {
-        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
-      }
-      quat.copy(camera.rotation, localPlayer.lookRotation);
-
-      // TODO: Send network updates if player.inputDirty or throttle rate reached
-      // and player.stateDirty = true then reset dirty flags
-    }
-
-    scene.render();
-
-    Fury.Input.handleFrameFinished();
-
-    window.requestAnimationFrame(loop);
   };
 
   // TODO: Separate nick setting (i.e. greet response)
@@ -2310,6 +2256,8 @@ let GameClient = module.exports = (function(){
     updateCanvasSize();
 
     Fury.init("fury"); // Consider anti-alias false
+
+    PlayerVisuals.init();
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
     // So now we create our materials
@@ -2331,9 +2279,61 @@ let GameClient = module.exports = (function(){
     });
   };
 
+  let lastTime = 0;
+  let lastNetSendTime = 0, sendInterval = 1/ 20;
+
+  let loop = () => {
+    let time = Date.now();
+    let elapsed = time - lastTime;
+    lastTime += elapsed;
+    if (elapsed > 66) elapsed = 66;
+    // ^^ Minimm 15 FPS - this is primarily to compenstate for alt-tab / focus loss
+    elapsed /= 1000;  // Convert to seconds
+
+    let sendNetUpdate = false;
+    if (time - lastNetSendTime >= sendInterval) {
+      sendNetUpdate = true;
+      lastNetSendTime = time;
+    }
+
+    if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+      Fury.Input.requestPointerLock();
+    }
+
+    // Update Players
+    for (let i = 0, l = players.length; i < l; i++) {
+      if (players[i]) {
+        players[i].update(elapsed);        
+      }
+    }
+
+    if (localPlayer) {
+      // Update Camera
+      if (localPlayer.snapCamera) {
+        vec3.copy(camera.position, localPlayer.position);
+        localPlayer.snapCamera = false;
+      } else {
+        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+      }
+      quat.copy(camera.rotation, localPlayer.lookRotation);
+
+      if ((sendNetUpdate && localPlayer.stateDirty) || localPlayer.inputDirty) {
+        localPlayer.stateDirty = localPlayer.inputDirty = false;
+        sendMessage(localPlayer.updateMessage);
+      }
+    }
+
+    scene.render();
+
+    Fury.Input.handleFrameFinished();
+
+    window.requestAnimationFrame(loop);
+  };
+
   exports.onmessage = (message) => {
     switch(message.type) {
       case MessageType.ACKNOWLEDGE:
+        // NOTE: Will happen post init but not necessarily post asset load
         localId = message.id;
         handleInitialServerState(message.data);
 
@@ -2342,33 +2342,129 @@ let GameClient = module.exports = (function(){
         break;
       case MessageType.CONNECTED:
         serverState.players[message.id] = message.player;
-        if (message.id == localId) {
-          localNick = message.player.nick;
-          localPlayer = Player.create({ id: message.id, position: vec3.clone(message.player.position), rotation: quat.create(), world: world });
-          localPlayer.snapCamera = true;  // Don't lerp to initial position, just set it
-          players.push(localPlayer);
-        } else {
-          players.push(Player.create({ id: message.id, isReplica: true, position: vec3.clone(message.player.position), rotation: quat.create(), world: world }));
-        }
+        spawnPlayer(message.id, message.player);
         break;
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
+        despawnPlayer(message.id);
         // TODO: Despawn player visuals and remove from player list
         break;
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
-        // Set Player Positions (& Inputs if not local)
-        // Remember to set snapCamera to true on local player if it's a teleport
-        // Remember incoming position array will be JS array (probably)
-        // so *copy* across the values into vec3
+        updatePlayer(message.id, message);
         break;
+    }
+  };
+
+  let handleInitialServerState = (state) => {
+    // NOTE: Will happen post init but not necessarily post asset load
+    serverState = state;
+
+    // Load world level and instanitate scene visuals
+    var sceneBoxes = world.createLevel(serverState.level);
+    // Add world objects to render scene
+    for (let i = 0, l = sceneBoxes.length; i < l; i++) {
+      let mesh = Fury.Mesh.create(Primitives.createCuboidMesh(sceneBoxes[i].size[0], sceneBoxes[i].size[1], sceneBoxes[i].size[2]));
+      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+      sceneBoxes.visuals = scene.add({ mesh: mesh, position: sceneBoxes[i].center, static: true, material: testMaterial });
+    }
+
+    // Spawn replicas for all existing players
+    for (let i = 0, l = state.players.length; i < l; i++) {
+      if (state.players[i]) {
+        if (state.players[i].id != localId) {
+          spawnPlayer(state.players[i].id, state.players[i]);
+        } else {
+          console.error("Received player data in initial state with local id");
+        }
+      }
+    }
+  };
+
+  let spawnPlayer = (id, player) => {
+    if (id == localId) {
+      localNick = player.nick;
+      localPlayer = Player.create({
+        id: id,
+        position: vec3.clone(player.position),
+        rotation: quat.create(),
+        world: world });
+      players.push(localPlayer);
+    } else {
+      let replica = Player.create({
+        id: id,
+        isReplica: true,
+        position: vec3.clone(player.position),
+        rotation: quat.create(),
+        world: world });
+      replica.visuals = PlayerVisuals.create(replica, scene);
+      players.push(replica);
+    }
+  };
+
+  let updatePlayer = (id, message) => {
+    if (id == localId) {
+      // Received correction from server
+      localPlayer.setLocalState(message);
+    } else {
+      // Update Replica
+      for (let i = 0, l = players.length; i < l; i++) {
+        if (players[i] && players[i].id == id) {
+          players[i].setReplicaState(message);
+          break;
+        }
+      }
+    }
+  };
+
+  let despawnPlayer = (id) => {
+    for(let i = 0, l = players.length; i < l; i++) {
+      if (players[i] && players[i].id == id) {
+        if (players[i].visuals) {
+          scene.remove(players[i].visuals);
+        }
+        players[i] = null;
+        // Would be nice to shorten the list but eh
+        break;
+      }
     }
   };
 
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":23,"../common/world":25,"./player":19,"./primitives":20,"./shaders":21}],19:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":24,"../common/world":26,"./player":20,"./player-visuals":19,"./primitives":21,"./shaders":22}],19:[function(require,module,exports){
+let Fury = require('../../fury/src/fury.js');
+let Primitives = require('./primitives');
+let Shaders = require('./shaders');
+
+let PlayerVisuals = module.exports = (function() {
+  let exports = {};
+  let prototype = {};
+
+  let playerMesh, playerMaterial;
+
+  exports.init = () => {
+    playerMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitColor) });
+    playerMaterial.color = [ 1.0, 0.0, 0.3 ];
+    // Should we save creating the mesh until we know the player proportions?
+    playerMesh = Fury.Mesh.create(Primitives.createCuboidMesh(0.5, 1.5, 0.5));
+  };
+
+  exports.create = (player, scene) => {
+    let visuals = scene.add({
+      mesh: playerMesh,
+      material: playerMaterial,
+      position: player.position,
+      rotation: player.rotation
+    });
+    return visuals;
+  };
+
+  return exports;
+})();
+
+},{"../../fury/src/fury.js":4,"./primitives":21,"./shaders":22}],20:[function(require,module,exports){
 // Client side player
 // Handles both local player and replicas
 // Handles input, movement and physics
@@ -2412,6 +2508,7 @@ let Player = module.exports = (function() {
     let lastPosition = vec3.clone(params.position);
     let targetPosition = vec3.clone(params.position);
     let targetRotation = quat.create();
+    let collisionResults = [];
 
     let detectInput = function() {
       // Clear existing input
@@ -2474,10 +2571,23 @@ let Player = module.exports = (function() {
     	// Move player to new position for physics checks
     	vec3.copy(player.position, targetPosition);
 
-    	let collision = false;
-
       // playerBox.center has changed because it's set to the playerPosition ref
       player.box.calculateMinMax(player.box.center, player.box.extents);
+
+      // TODO: Improved Collision Algorithm
+      // (Account for corner cases and flush colliders when moving)
+      // Use swept bounds (will catch things you would pass through)
+      // Get All Intersections
+      // Evaluate each axis against all intersections (check for enter)
+      // Get distance by looking at min / max (accounting for movement direction)
+      // Break ties based on previous frame velocity
+      // Whichever entry for that axis is closest - cancel movement on that axis (or step)
+      // Recalculate bounds against other boxes if still entering on other axis
+      // if stop, or any axis if step - cancel movement or step if haven't already
+      // (cancel step if moving on same axis)
+      // After these are resolved if stepped
+      // check against world again and cancel all movement if entering
+      // this is specifically to stop you entering the ceiling but it's a nice catch all too
 
     	// We used to have the collision handling outside the loop, but has we need to continue
     	// the loops I moved it inside, a world collision method which returned a list of boxes
@@ -2486,7 +2596,6 @@ let Player = module.exports = (function() {
     	for (let i = 0, l = player.world.boxes.length; i < l; i++) {
         let worldBox = player.world.boxes[i];
         if (Physics.Box.intersect(player.box, worldBox)) {
-          collision = true;
 
           // Check each axis individually and only stop movement on those which changed from
           // not overlapping to overlapping. In theory we should calculate distance and move
@@ -2593,6 +2702,7 @@ let Player = module.exports = (function() {
     };
 
     player.id = params.id;
+    player.snapCamera = true;
     player.isReplica = !!params.isReplica;
     player.world = params.world;
     player.position = params.position;
@@ -2602,7 +2712,10 @@ let Player = module.exports = (function() {
     player.localZ = vec3.create();
     player.jumping = false;
     player.yVelocity = 0;
-    player.box = Physics.Box.create({ center: player.position, size: vec3.fromValues(0.5, 2, 0.5) });
+    player.box = Physics.Box.create({
+      center: player.position,
+      size: vec3.fromValues(0.5, 1.5, 0.5)
+    });
 
     // Input tracking / public setters (for replicas)
     player.input = [0,0];
@@ -2614,6 +2727,12 @@ let Player = module.exports = (function() {
     // The fact movement is dependent on rotation and we're not networking it
     // as often means we're going to get plenty of misprediction with extrapolation
     // we might want to switch to smoothed interp of previous positions instead
+
+    player.setLocalState = (updateMessage) => {
+      vec3.copy(player.position, updateMessage.position);
+      player.yVelocity = updateMessage.yVelocity;
+      player.snapCamera = true;
+    };
 
     player.setReplicaState = (updateMessage) => {
       // Copy across current position and inputs (for extrapolation)
@@ -2643,13 +2762,12 @@ let Player = module.exports = (function() {
         // ^^ The returned roll / pitch / yaw from these flick around a lot, don't know if this is that functions 'fault'
         // and using another method might work better, e.g. storing pitch / yaw as inputs and then creating quat from it
         // That would then remove all these hacks around calculating a useful pitch / yaw value
-        let pitch = getPitch(player.lookRotation);  // atan rather than atan2 as we don't want more than -90:90
+        let pitch = getPitch(player.lookRotation);  // atan rather than atan2 as we don't want more than -90:90 range
         let pitchRotation = elapsed * player.lookInput[1];
         if (Math.sign(pitch) == -Math.sign(pitchRotation) || Math.abs(pitch - pitchRotation) < halfPI - clampAngle) {
           quat.rotateX(player.lookRotation, player.lookRotation, pitchRotation);
         }
         quat.copy(targetRotation, player.lookRotation);
-
 
         vec3.transformQuat(player.localZ, Maths.vec3Z, player.lookRotation);
         let yaw = Maths.calculateYaw(player.lookRotation);
@@ -2664,6 +2782,7 @@ let Player = module.exports = (function() {
             yaw = halfPI + (halfPI - yaw);
           }
         }
+        quat.setAxisAngle(player.rotation, Maths.vec3Y, yaw);
 
         /*
         let radToDeg = 180 / Math.PI;
@@ -2672,8 +2791,6 @@ let Player = module.exports = (function() {
           + " pitch: " + (radToDeg * pitch).toFixed(2)
           + " yaw: " + (radToDeg * yaw).toFixed(2));
         */
-
-        quat.setAxisAngle(player.rotation, Maths.vec3Y, yaw);
       }
 
       // Calculate Local Axes from updated rotation
@@ -2701,7 +2818,7 @@ let Player = module.exports = (function() {
         }
 
         vec3.copy(player.updateMessage.position, player.position);
-        vec3.copy(player.updateMessage.rotation, player.rotation);
+        quat.copy(player.updateMessage.rotation, player.rotation);
         vec2.copy(player.updateMessage.input, player.input);
         player.updateMessage.jump = player.jumpInput;
         player.updateMessage.yVelocity = player.yVelocity;
@@ -2714,7 +2831,7 @@ let Player = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":23}],20:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":24}],21:[function(require,module,exports){
 // Helper for creating mesh primitives
 let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
@@ -2821,7 +2938,7 @@ var Primitives = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],21:[function(require,module,exports){
+},{"../../fury/src/fury.js":4}],22:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 
 var Shaders = module.exports = (function() {
@@ -2864,12 +2981,47 @@ var Shaders = module.exports = (function() {
 		 this.setAttribute("aTextureCoord", mesh.textureBuffer);
 		 this.setIndexedAttribute(mesh.indexBuffer);
 	 }
-  };
+ };
+
+  exports.UnlitColor = {
+   vsSource: [
+		"attribute vec3 aVertexPosition;",
+
+    "uniform mat4 uMVMatrix;",
+    "uniform mat4 uPMatrix;",
+
+    "void main(void) {",
+       "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+    "}"
+    ].join('\n'),
+    fsSource: [
+      "precision mediump float;",
+
+      "uniform vec3 uColor;",
+
+      "void main(void) {",
+         "gl_FragColor = vec4(uColor, 1.0);",
+      "}"].join('\n'),
+   	 attributeNames: [ "aVertexPosition", ],
+   	 uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
+   	 pMatrixUniformName: "uPMatrix",
+   	 mvMatrixUniformName: "uMVMatrix",
+   	 bindMaterial: function(material) {
+      this.enableAttribute("aVertexPosition");
+      this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
+      // TOOD: ^^ A method to call when creating materials from the shader definition
+      // to ensure they have any additional properties might be nice
+   	 },
+   	 bindBuffers: function(mesh) {
+   		 this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+   		 this.setIndexedAttribute(mesh.indexBuffer);
+   	 }
+   };
 
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],22:[function(require,module,exports){
+},{"../../fury/src/fury.js":4}],23:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -2938,7 +3090,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"./message-types":23,"./world":25}],23:[function(require,module,exports){
+},{"./message-types":24,"./world":26}],24:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -2948,7 +3100,7 @@ var MessageType = module.exports = {
   POSITION: "position"
 };
 
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -2960,7 +3112,7 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let vec3 = Fury.Maths.vec3;
@@ -2977,6 +3129,14 @@ let World = module.exports = (function() {
       let box = Physics.Box.create({ center: position, size: size });
       this.boxes.push(box);
       return box;
+    },
+    getIntersections: function(results, box) {
+      results.length = 0;
+      for (let i = 0, l = this.boxes.length; i < l; i++) {
+        if (Physics.Box.intersect(box, this.boxes[i])) {
+          results.push(box);
+        }
+      }
     }
   };
 

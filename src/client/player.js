@@ -41,6 +41,7 @@ let Player = module.exports = (function() {
     let lastPosition = vec3.clone(params.position);
     let targetPosition = vec3.clone(params.position);
     let targetRotation = quat.create();
+    let collisionResults = [];
 
     let detectInput = function() {
       // Clear existing input
@@ -103,10 +104,23 @@ let Player = module.exports = (function() {
     	// Move player to new position for physics checks
     	vec3.copy(player.position, targetPosition);
 
-    	let collision = false;
-
       // playerBox.center has changed because it's set to the playerPosition ref
       player.box.calculateMinMax(player.box.center, player.box.extents);
+
+      // TODO: Improved Collision Algorithm
+      // (Account for corner cases and flush colliders when moving)
+      // Use swept bounds (will catch things you would pass through)
+      // Get All Intersections
+      // Evaluate each axis against all intersections (check for enter)
+      // Get distance by looking at min / max (accounting for movement direction)
+      // Break ties based on previous frame velocity
+      // Whichever entry for that axis is closest - cancel movement on that axis (or step)
+      // Recalculate bounds against other boxes if still entering on other axis
+      // if stop, or any axis if step - cancel movement or step if haven't already
+      // (cancel step if moving on same axis)
+      // After these are resolved if stepped
+      // check against world again and cancel all movement if entering
+      // this is specifically to stop you entering the ceiling but it's a nice catch all too
 
     	// We used to have the collision handling outside the loop, but has we need to continue
     	// the loops I moved it inside, a world collision method which returned a list of boxes
@@ -115,7 +129,6 @@ let Player = module.exports = (function() {
     	for (let i = 0, l = player.world.boxes.length; i < l; i++) {
         let worldBox = player.world.boxes[i];
         if (Physics.Box.intersect(player.box, worldBox)) {
-          collision = true;
 
           // Check each axis individually and only stop movement on those which changed from
           // not overlapping to overlapping. In theory we should calculate distance and move
@@ -222,6 +235,7 @@ let Player = module.exports = (function() {
     };
 
     player.id = params.id;
+    player.snapCamera = true;
     player.isReplica = !!params.isReplica;
     player.world = params.world;
     player.position = params.position;
@@ -231,7 +245,10 @@ let Player = module.exports = (function() {
     player.localZ = vec3.create();
     player.jumping = false;
     player.yVelocity = 0;
-    player.box = Physics.Box.create({ center: player.position, size: vec3.fromValues(0.5, 2, 0.5) });
+    player.box = Physics.Box.create({
+      center: player.position,
+      size: vec3.fromValues(0.5, 1.5, 0.5)
+    });
 
     // Input tracking / public setters (for replicas)
     player.input = [0,0];
@@ -243,6 +260,12 @@ let Player = module.exports = (function() {
     // The fact movement is dependent on rotation and we're not networking it
     // as often means we're going to get plenty of misprediction with extrapolation
     // we might want to switch to smoothed interp of previous positions instead
+
+    player.setLocalState = (updateMessage) => {
+      vec3.copy(player.position, updateMessage.position);
+      player.yVelocity = updateMessage.yVelocity;
+      player.snapCamera = true;
+    };
 
     player.setReplicaState = (updateMessage) => {
       // Copy across current position and inputs (for extrapolation)
@@ -301,7 +324,6 @@ let Player = module.exports = (function() {
           + " pitch: " + (radToDeg * pitch).toFixed(2)
           + " yaw: " + (radToDeg * yaw).toFixed(2));
         */
-
       }
 
       // Calculate Local Axes from updated rotation
@@ -329,7 +351,7 @@ let Player = module.exports = (function() {
         }
 
         vec3.copy(player.updateMessage.position, player.position);
-        vec3.copy(player.updateMessage.rotation, player.rotation);
+        quat.copy(player.updateMessage.rotation, player.rotation);
         vec2.copy(player.updateMessage.input, player.input);
         player.updateMessage.jump = player.jumpInput;
         player.updateMessage.yVelocity = player.yVelocity;
