@@ -2148,7 +2148,9 @@ var Connection = module.exports = (function() {
   };
 
   exports.send = (obj) => {
-    webSocket.send(JSON.stringify(obj));
+    if (webSocket.readyState == 1) {
+      webSocket.send(JSON.stringify(obj));      
+    }
   };
 
 	exports.connect = (params) => {
@@ -2303,12 +2305,12 @@ let GameClient = module.exports = (function(){
     // Update Players
     for (let i = 0, l = players.length; i < l; i++) {
       if (players[i]) {
-        players[i].update(elapsed);        
+        players[i].update(elapsed);
       }
     }
 
     if (localPlayer) {
-      // Update Camera
+      // Update Camera - TODO: Add offset rather than centered camera
       if (localPlayer.snapCamera) {
         vec3.copy(camera.position, localPlayer.position);
         localPlayer.snapCamera = false;

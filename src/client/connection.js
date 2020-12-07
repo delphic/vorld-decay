@@ -25,7 +25,9 @@ var Connection = module.exports = (function() {
   };
 
   exports.send = (obj) => {
-    webSocket.send(JSON.stringify(obj));
+    if (webSocket.readyState == 1) {
+      webSocket.send(JSON.stringify(obj));      
+    }
   };
 
 	exports.connect = (params) => {
