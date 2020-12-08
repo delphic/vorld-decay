@@ -2530,7 +2530,7 @@ var Connection = module.exports = (function() {
 
   exports.send = (obj) => {
     if (webSocket.readyState == 1) {
-      webSocket.send(JSON.stringify(obj));      
+      webSocket.send(JSON.stringify(obj));
     }
   };
 
@@ -2573,8 +2573,8 @@ var Connection = module.exports = (function() {
       onclose(event.code);
 		};
 		webSocket.onmessage = (event) => {
-			if (isDebug) console.log(event.data);
       let message = JSON.parse(event.data);
+      if (isDebug && message.type != "position") console.log(event.data);
       onmessage(message);
 		};
 	};
