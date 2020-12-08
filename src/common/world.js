@@ -1,6 +1,7 @@
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
-let vec3 = Fury.Maths.vec3;
+let Maths = Fury.Maths;
+let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
 
@@ -65,7 +66,7 @@ let World = module.exports = (function() {
     }
 
     // Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
-    let createTeleporter = function(x, y, z, targetPoint) {
+    let createTeleporter = function(x, y, z, targetPoint, targetRotation) {
       let teleporterBlock = VorldConfig.BlockIds.GRASS;
       fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
 
@@ -76,7 +77,7 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ targetPosition: targetPoint, bounds: teleporterBounds });
+      world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
     let createTestSteps = function(level) {
@@ -91,7 +92,14 @@ let World = module.exports = (function() {
         case "test":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
-          createTeleporter(0, 0,-9, [0,3,0]);
+          createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+
+          let d = 30;
+          createRoom(-101, 0, -1, 3, 3, d);
+          createTeleporter(-100, 0, d-3, vec3.fromValues(101,1,0.5), Maths.quatEuler(0, 180+45, 0));
+
+          createRoom(100, -4, -1, 30, 8, 20);
+          createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
           break;
       }
       return level;

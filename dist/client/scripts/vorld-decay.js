@@ -780,12 +780,16 @@ let Maths = module.exports = (function() {
 
   let equals = glMatrix.glMatrix.equals;
 
-  // TODO: create quat from euler
+  exports.quatEuler = function(x, y, z) {
+    let q = glMatrix.quat.create();
+    glMatrix.quat.fromEuler(q, x, y, z);
+    return q;
+  };
 
-  exports.quatIdentity = function(q) {
+  exports.quatIsIdentity = function(q) {
     // Is the provided quaterion identity
     return (equals(q[0], 0) && equals(q[1], 0) && equals(q[2], 0) && equals(q[3], 1));
-  }
+  };
 
   exports.quatRotate = (function() {
   	var i = glMatrix.quat.create();
@@ -1647,7 +1651,7 @@ var Scene = module.exports = function() {
 
 		var createObjectBounds = function(object, mesh, rotation) {
 			// If object is static and not rotated, create object AABB from mesh bounds
-			if (!forceSphereCulling && object.static && (!rotation || Maths.quatIdentity(rotation))) {
+			if (!forceSphereCulling && object.static && (!rotation || Maths.quatIsIdentity(rotation))) {
 				// TODO: Allow for calculation of AABB of rotated meshes
 				let center = vec3.clone(mesh.bounds.center);
 				vec3.add(center, center, object.transform.position);
@@ -2924,6 +2928,10 @@ let Player = module.exports = (function() {
 
     player.setLocalState = (updateMessage) => {
       vec3.copy(player.position, updateMessage.position);
+      quat.copy(player.rotation, updateMessage.rotation);
+      if (updateMessage.snapLook) {
+        quat.copy(player.lookRotation, updateMessage.rotation);
+      }
       player.yVelocity = updateMessage.yVelocity;
       player.snapCamera = true;
     };
@@ -3448,6 +3456,7 @@ let WorldVisuals = module.exports = (function() {
 let MessageType = require('./message-types');
 let World = require('./world');
 let Bounds = require('../../fury/src/bounds');
+let Maths = require('../../fury/src/maths');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -3496,9 +3505,9 @@ let GameServer = module.exports = (function() {
           if (Bounds.contains(message.position, teleporter.bounds)) {
             shouldTeleport = true;
             // TODO: Not instant teleport please - requires game loop server side or some way to defer
-            message.position[0] = teleporter.targetPosition[0];
-            message.position[1] = teleporter.targetPosition[1];
-            message.position[2] = teleporter.targetPosition[2];
+            Maths.vec3.copy(message.position, teleporter.targetPosition);
+            Maths.quat.copy(message.rotation, teleporter.targetRotation);
+            message.snapLook = true;
           }
         }
 
@@ -3525,7 +3534,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../fury/src/bounds":2,"./message-types":26,"./world":31}],26:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":26,"./world":31}],26:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -3841,7 +3850,8 @@ module.exports = (function() {
 },{}],31:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
-let vec3 = Fury.Maths.vec3;
+let Maths = Fury.Maths;
+let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
 
@@ -3906,7 +3916,7 @@ let World = module.exports = (function() {
     }
 
     // Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
-    let createTeleporter = function(x, y, z, targetPoint) {
+    let createTeleporter = function(x, y, z, targetPoint, targetRotation) {
       let teleporterBlock = VorldConfig.BlockIds.GRASS;
       fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
 
@@ -3917,7 +3927,7 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ targetPosition: targetPoint, bounds: teleporterBounds });
+      world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
     let createTestSteps = function(level) {
@@ -3932,7 +3942,14 @@ let World = module.exports = (function() {
         case "test":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
-          createTeleporter(0, 0,-9, [0,3,0]);
+          createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+
+          let d = 30;
+          createRoom(-101, 0, -1, 3, 3, d);
+          createTeleporter(-100, 0, d-3, vec3.fromValues(101,1,0.5), Maths.quatEuler(0, 180+45, 0));
+
+          createRoom(100, -4, -1, 30, 8, 20);
+          createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
           break;
       }
       return level;

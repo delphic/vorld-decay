@@ -6,6 +6,7 @@
 let MessageType = require('./message-types');
 let World = require('./world');
 let Bounds = require('../../fury/src/bounds');
+let Maths = require('../../fury/src/maths');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -54,9 +55,9 @@ let GameServer = module.exports = (function() {
           if (Bounds.contains(message.position, teleporter.bounds)) {
             shouldTeleport = true;
             // TODO: Not instant teleport please - requires game loop server side or some way to defer
-            message.position[0] = teleporter.targetPosition[0];
-            message.position[1] = teleporter.targetPosition[1];
-            message.position[2] = teleporter.targetPosition[2];
+            Maths.vec3.copy(message.position, teleporter.targetPosition);
+            Maths.quat.copy(message.rotation, teleporter.targetRotation);
+            message.snapLook = true;
           }
         }
 

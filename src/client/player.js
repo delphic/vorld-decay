@@ -134,6 +134,10 @@ let Player = module.exports = (function() {
 
     player.setLocalState = (updateMessage) => {
       vec3.copy(player.position, updateMessage.position);
+      quat.copy(player.rotation, updateMessage.rotation);
+      if (updateMessage.snapLook) {
+        quat.copy(player.lookRotation, updateMessage.rotation);
+      }
       player.yVelocity = updateMessage.yVelocity;
       player.snapCamera = true;
     };
