@@ -6,8 +6,8 @@
 // rather than run physics on server
 
 // Currently just contains movement / physics code no visuals
-// However deals with input, so would probably need to be split in order
-// to move to common
+// However deals with input, so would probably need to be split into
+// player controller + player in order to move to common
 
 let Fury = require('../../fury/src/fury.js');
 let MessageType = require('../common/message-types');

@@ -5,6 +5,7 @@
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
 let World = require('./world');
+let Bounds = require('../../fury/src/bounds');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -44,8 +45,24 @@ let GameServer = module.exports = (function() {
         break;
       case MessageType.POSITION:
         message.id = id;
+
+        // Check for teleporter collision
+        let shouldTeleport = false;
+        for (let i = 0, l = world.teleporters.length; i < l; i++) {
+          let teleporter = world.teleporters[i];
+          // Ideally would have player concept on server now and could use it's AABB
+          if (Bounds.contains(message.position, teleporter.bounds)) {
+            shouldTeleport = true;
+            // TODO: Not instant teleport please - requires game loop server side or some way to defer
+            message.position[0] = teleporter.targetPosition[0];
+            message.position[1] = teleporter.targetPosition[1];
+            message.position[2] = teleporter.targetPosition[2];
+          }
+        }
+
         globalState.players[id].position = message.position;
-        distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz
+        distributeMessage(shouldTeleport ? -1 : id, message); // TODO: Relevancy / Spacial Partitioning plz (could do this by section)
+
         break;
       default:
         message.id = id;

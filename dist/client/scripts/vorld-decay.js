@@ -2796,8 +2796,8 @@ let PlayerVisuals = module.exports = (function() {
 // rather than run physics on server
 
 // Currently just contains movement / physics code no visuals
-// However deals with input, so would probably need to be split in order
-// to move to common
+// However deals with input, so would probably need to be split into
+// player controller + player in order to move to common
 
 let Fury = require('../../fury/src/fury.js');
 let MessageType = require('../common/message-types');
@@ -3447,6 +3447,7 @@ let WorldVisuals = module.exports = (function() {
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
 let World = require('./world');
+let Bounds = require('../../fury/src/bounds');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -3486,8 +3487,24 @@ let GameServer = module.exports = (function() {
         break;
       case MessageType.POSITION:
         message.id = id;
+
+        // Check for teleporter collision
+        let shouldTeleport = false;
+        for (let i = 0, l = world.teleporters.length; i < l; i++) {
+          let teleporter = world.teleporters[i];
+          // Ideally would have player concept on server now and could use it's AABB
+          if (Bounds.contains(message.position, teleporter.bounds)) {
+            shouldTeleport = true;
+            // TODO: Not instant teleport please - requires game loop server side or some way to defer
+            message.position[0] = teleporter.targetPosition[0];
+            message.position[1] = teleporter.targetPosition[1];
+            message.position[2] = teleporter.targetPosition[2];
+          }
+        }
+
         globalState.players[id].position = message.position;
-        distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz
+        distributeMessage(shouldTeleport ? -1 : id, message); // TODO: Relevancy / Spacial Partitioning plz (could do this by section)
+
         break;
       default:
         message.id = id;
@@ -3508,7 +3525,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"./message-types":26,"./world":31}],26:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"./message-types":26,"./world":31}],26:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -3859,6 +3876,7 @@ let World = module.exports = (function() {
 
     world.vorld = vorld;
     world.boxes = [];
+    world.teleporters = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -3870,27 +3888,51 @@ let World = module.exports = (function() {
       }
     };
 
+    let createRoom = function(x,y,z, w,h,d) {
+      let wall = VorldConfig.BlockIds.STONE_BLOCKS;
+      let floor = VorldConfig.BlockIds.STONE;
+      let ceiling = VorldConfig.BlockIds.STONE;
+
+      // existing w = 9 x = -4
+      // d = 9 z = -4
+      // h = 4 y = 0
+      fill(x,x+w-1, y,y+h-1, z+d,z+d, wall);
+      fill(x,x+w-1, y,y+h-1, z-1,z-1, wall);
+      fill(x+w,x+w, y,y+h-1, z,z+d-1, wall);
+      fill(x-1,x-1, y,y+h-1, z,z+d-1, wall);
+
+      fill(x,x+w-1, y+h,y+h, z,z+d-1, ceiling);
+      fill(x,x+w-1, y-1,y-1, z,z+d-1, floor);
+    }
+
+    // Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
+    let createTeleporter = function(x, y, z, targetPoint) {
+      let teleporterBlock = VorldConfig.BlockIds.GRASS;
+      fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
+
+      let teleporterBounds = Physics.Box.create({
+        min: vec3.fromValues(x, y, z),
+        max: vec3.fromValues(x+1, y+2, z+1)
+      });
+      // TODO: Would be cool to add an outer bounds which starts some kinda visual change
+      // when you enter it (client side only), and potentially would act as the enabler for
+      // the inner bounds on server side.
+      world.teleporters.push({ targetPosition: targetPoint, bounds: teleporterBounds });
+    };
+
+    let createTestSteps = function(level) {
+      // test steps!
+      level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
+      level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
+    };
+
     world.createLevel = (levelName) => {
       let level = [];
       switch(levelName) {
         case "test":
-          let block = VorldConfig.BlockIds.STONE_BLOCKS;
-
           // Placeholder level creation
-
-          // walls
-          fill(-4,4, 0,3, 5,5, block);
-          fill(-4,4, 0,3, -5,-5, block);
-          fill(5,5, 0,3, -4,4, block);
-          fill(-5,-5, 0,3, -4,4, block);
-          fill(-4,4, -1,-1, -4,4, block);
-          fill(-4,4, 4,4, -4,4, block);
-          fill(0,0, 0,0, 0,0, block);
-
-          // test steps
-          // level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
-          // level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
-
+          createRoom(-5,0,-10, 11,5,11);
+          createTeleporter(0, 0,-9, [0,3,0]);
           break;
       }
       return level;

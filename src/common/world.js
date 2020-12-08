@@ -35,6 +35,7 @@ let World = module.exports = (function() {
 
     world.vorld = vorld;
     world.boxes = [];
+    world.teleporters = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -46,27 +47,51 @@ let World = module.exports = (function() {
       }
     };
 
+    let createRoom = function(x,y,z, w,h,d) {
+      let wall = VorldConfig.BlockIds.STONE_BLOCKS;
+      let floor = VorldConfig.BlockIds.STONE;
+      let ceiling = VorldConfig.BlockIds.STONE;
+
+      // existing w = 9 x = -4
+      // d = 9 z = -4
+      // h = 4 y = 0
+      fill(x,x+w-1, y,y+h-1, z+d,z+d, wall);
+      fill(x,x+w-1, y,y+h-1, z-1,z-1, wall);
+      fill(x+w,x+w, y,y+h-1, z,z+d-1, wall);
+      fill(x-1,x-1, y,y+h-1, z,z+d-1, wall);
+
+      fill(x,x+w-1, y+h,y+h, z,z+d-1, ceiling);
+      fill(x,x+w-1, y-1,y-1, z,z+d-1, floor);
+    }
+
+    // Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
+    let createTeleporter = function(x, y, z, targetPoint) {
+      let teleporterBlock = VorldConfig.BlockIds.GRASS;
+      fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
+
+      let teleporterBounds = Physics.Box.create({
+        min: vec3.fromValues(x, y, z),
+        max: vec3.fromValues(x+1, y+2, z+1)
+      });
+      // TODO: Would be cool to add an outer bounds which starts some kinda visual change
+      // when you enter it (client side only), and potentially would act as the enabler for
+      // the inner bounds on server side.
+      world.teleporters.push({ targetPosition: targetPoint, bounds: teleporterBounds });
+    };
+
+    let createTestSteps = function(level) {
+      // test steps!
+      level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
+      level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
+    };
+
     world.createLevel = (levelName) => {
       let level = [];
       switch(levelName) {
         case "test":
-          let block = VorldConfig.BlockIds.STONE_BLOCKS;
-
           // Placeholder level creation
-
-          // walls
-          fill(-4,4, 0,3, 5,5, block);
-          fill(-4,4, 0,3, -5,-5, block);
-          fill(5,5, 0,3, -4,4, block);
-          fill(-5,-5, 0,3, -4,4, block);
-          fill(-4,4, -1,-1, -4,4, block);
-          fill(-4,4, 4,4, -4,4, block);
-          fill(0,0, 0,0, 0,0, block);
-
-          // test steps
-          // level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
-          // level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
-
+          createRoom(-5,0,-10, 11,5,11);
+          createTeleporter(0, 0,-9, [0,3,0]);
           break;
       }
       return level;
