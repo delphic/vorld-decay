@@ -16,8 +16,10 @@ let Maths = Fury.Maths;
 let vec2 = Maths.vec2, vec3 = Maths.vec3, quat = Maths.quat;
 
 let Player = module.exports = (function() {
-  var exports = {};
-  var prototype = {};
+  let exports = {};
+  let prototype = {};
+
+  let size = exports.size = vec3.fromValues(1, 2, 1);
 
   // static methods
   let getPitch = function(q) {
@@ -32,7 +34,7 @@ let Player = module.exports = (function() {
   // Movement Settings
   let clampAngle = 10 * Math.PI / 180;
   let movementSpeed = 2, lookSpeed = 1;
-  let mouseLookSpeed = 0.1, jumpDeltaV = 3;
+  let mouseLookSpeed = 0.1, jumpDeltaV = 5;
   // Q: Do we need to scale mouseLookSpeed by canvas size?
 
   exports.create = (params) => {  // expected params: id, position, rotation, world, optional: isReplica
@@ -112,7 +114,7 @@ let Player = module.exports = (function() {
     player.localZ = vec3.create();
     player.jumping = false;
     player.yVelocity = 0;
-    player.size = vec3.fromValues(0.5, 1.5, 0.5);
+    player.size = vec3.clone(size);
 
     player.controller = require('./character-controller').create({
       player: player,

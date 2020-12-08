@@ -33,7 +33,7 @@ let WorldVisuals = module.exports = (function() {
       	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
       	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
       	atlasMaterial.fogColor = vec3.fromValues(0, 0, 0);
-      	atlasMaterial.fogDensity = 0.25;  // TODO: Expose Variables for tweaking please
+      	atlasMaterial.fogDensity = 0.125;  // TODO: Expose Variables for tweaking please
         cb();
       };
       image.src = src;

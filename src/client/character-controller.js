@@ -297,12 +297,6 @@ var CharacterController = module.exports = (function() {
 
       if (checkVoxelIntersection(player.world.vorld, playerBox)) {
         // TODO: Should move up to the object instead - y Velocity can get big when falling
-        if (player.yVelocity < 0) {
-          // HACK: Assuming we're not moving more than 1 unit per frame (not a valid assumption)
-          // the position to move the min to is the next integer - this is still an improvement
-          // on just clamping - this assumes you haven't cast using player box
-          lastPosition[1] = playerBox.extents[1] + Math.floor(lastPosition[1] - playerBox.extents[1]);
-        }
         vec3.copy(player.position, lastPosition);
         if (player.yVelocity < 0) {
           player.jumping = false;

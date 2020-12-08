@@ -2420,12 +2420,6 @@ var CharacterController = module.exports = (function() {
 
       if (checkVoxelIntersection(player.world.vorld, playerBox)) {
         // TODO: Should move up to the object instead - y Velocity can get big when falling
-        if (player.yVelocity < 0) {
-          // HACK: Assuming we're not moving more than 1 unit per frame (not a valid assumption)
-          // the position to move the min to is the next integer - this is still an improvement
-          // on just clamping - this assumes you haven't cast using player box
-          lastPosition[1] = playerBox.extents[1] + Math.floor(lastPosition[1] - playerBox.extents[1]);
-        }
         vec3.copy(player.position, lastPosition);
         if (player.yVelocity < 0) {
           player.jumping = false;
@@ -2565,6 +2559,8 @@ let GameClient = module.exports = (function(){
     ratio: cameraRatio,
     position: vec3.fromValues(0, 2, 3)
   });
+  camera.targetPosition = vec3.clone(camera.position);
+  camera.playerOffset = vec3.fromValues(0, 1, 0);
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
   let world = require('../common/world').create();
 
@@ -2635,11 +2631,12 @@ let GameClient = module.exports = (function(){
 
     if (localPlayer) {
       // Update Camera - TODO: Add offset rather than centered camera
+      vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
       if (localPlayer.snapCamera) {
-        vec3.copy(camera.position, localPlayer.position);
+        vec3.copy(camera.position, camera.targetPosition);
         localPlayer.snapCamera = false;
       } else {
-        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+        vec3.lerp(camera.position, camera.targetPosition, localPlayer.position, 0.25);
       }
       quat.copy(camera.rotation, localPlayer.lookRotation);
 
@@ -2762,6 +2759,7 @@ let GameClient = module.exports = (function(){
 let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
+let Player = require('./player');
 
 let PlayerVisuals = module.exports = (function() {
   let exports = {};
@@ -2773,7 +2771,7 @@ let PlayerVisuals = module.exports = (function() {
     playerMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitColor) });
     playerMaterial.color = [ 1.0, 0.0, 0.3 ];
     // Should we save creating the mesh until we know the player proportions?
-    playerMesh = Fury.Mesh.create(Primitives.createCuboidMesh(0.5, 1.5, 0.5));
+    playerMesh = Fury.Mesh.create(Primitives.createCuboidMesh(0.75 * Player.size[0], Player.size[1], 0.75 * Player.size[2]));
   };
 
   exports.create = (player, scene) => {
@@ -2789,7 +2787,7 @@ let PlayerVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./primitives":22,"./shaders":23}],21:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"./player":21,"./primitives":22,"./shaders":23}],21:[function(require,module,exports){
 // Client side player
 // Handles both local player and replicas
 // Handles input and movement
@@ -2808,8 +2806,10 @@ let Maths = Fury.Maths;
 let vec2 = Maths.vec2, vec3 = Maths.vec3, quat = Maths.quat;
 
 let Player = module.exports = (function() {
-  var exports = {};
-  var prototype = {};
+  let exports = {};
+  let prototype = {};
+
+  let size = exports.size = vec3.fromValues(1, 2, 1);
 
   // static methods
   let getPitch = function(q) {
@@ -2824,7 +2824,7 @@ let Player = module.exports = (function() {
   // Movement Settings
   let clampAngle = 10 * Math.PI / 180;
   let movementSpeed = 2, lookSpeed = 1;
-  let mouseLookSpeed = 0.1, jumpDeltaV = 3;
+  let mouseLookSpeed = 0.1, jumpDeltaV = 5;
   // Q: Do we need to scale mouseLookSpeed by canvas size?
 
   exports.create = (params) => {  // expected params: id, position, rotation, world, optional: isReplica
@@ -2904,7 +2904,7 @@ let Player = module.exports = (function() {
     player.localZ = vec3.create();
     player.jumping = false;
     player.yVelocity = 0;
-    player.size = vec3.fromValues(0.5, 1.5, 0.5);
+    player.size = vec3.clone(size);
 
     player.controller = require('./character-controller').create({
       player: player,
@@ -3363,7 +3363,7 @@ let WorldVisuals = module.exports = (function() {
       	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
       	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
       	atlasMaterial.fogColor = vec3.fromValues(0, 0, 0);
-      	atlasMaterial.fogDensity = 0.25;  // TODO: Expose Variables for tweaking please
+      	atlasMaterial.fogDensity = 0.125;  // TODO: Expose Variables for tweaking please
         cb();
       };
       image.src = src;

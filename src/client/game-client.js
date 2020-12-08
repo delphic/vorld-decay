@@ -21,6 +21,8 @@ let GameClient = module.exports = (function(){
     ratio: cameraRatio,
     position: vec3.fromValues(0, 2, 3)
   });
+  camera.targetPosition = vec3.clone(camera.position);
+  camera.playerOffset = vec3.fromValues(0, 1, 0);
   let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
   let world = require('../common/world').create();
 
@@ -91,11 +93,12 @@ let GameClient = module.exports = (function(){
 
     if (localPlayer) {
       // Update Camera - TODO: Add offset rather than centered camera
+      vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
       if (localPlayer.snapCamera) {
-        vec3.copy(camera.position, localPlayer.position);
+        vec3.copy(camera.position, camera.targetPosition);
         localPlayer.snapCamera = false;
       } else {
-        vec3.lerp(camera.position, camera.position, localPlayer.position, 0.25);
+        vec3.lerp(camera.position, camera.targetPosition, localPlayer.position, 0.25);
       }
       quat.copy(camera.rotation, localPlayer.lookRotation);
 
