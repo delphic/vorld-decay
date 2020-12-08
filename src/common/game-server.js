@@ -15,12 +15,12 @@ let GameServer = module.exports = (function() {
   // Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
   let sendMessage, distributeMessage;
 
-  let initialSpawnPosition = [0, 1, 0];
-  // TODO: going to need some level management code!
-
   // This is information which needs to be sent on client connection
+  // Holds DTOs, rather than actual world objects, might be good to call
+  // them as such and have classes for them
   let globalState = {
-    players: []
+    players: [],
+    pickups: []
   };
   let world = World.create();
 
@@ -41,7 +41,7 @@ let GameServer = module.exports = (function() {
       case MessageType.GREET:
         let nick = message.nick;
         if (!nick) nick = "Player " + (id + 1);
-        globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
+        globalState.players[id] = { id: id, nick: nick, position: world.initialSpawnPosition };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
       case MessageType.PICKUP:
@@ -51,6 +51,7 @@ let GameServer = module.exports = (function() {
           if (pickup.canPickup(message.position)) {
             // This player should pickup the object!
             pickup.enabled = false;
+            globalState.pickups.push({ id: pickup.id, owner: id, position: null });
             distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
           }
         }
@@ -93,7 +94,8 @@ let GameServer = module.exports = (function() {
             if (pickup.autoPickup && pickup.canPickup(message.position)) {
               // This player should pickup the object!
               pickup.enabled = false;
-              distributeMessage(-1, { id: message.id, type: MessageType.PICKUP, pickupId: pickup.id });
+              setPickupGlobalState(pickup.id, id);
+              distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
             }
           }
         }
@@ -105,9 +107,44 @@ let GameServer = module.exports = (function() {
     }
   };
 
+  let setPickupGlobalState = (id, owner) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].id == id) {
+        globalState.pickups[i].owner = owner;
+        globalState.pickups[i].position = null;
+        return;
+      }
+    }
+    globalState.pickups.push({ id: id, owner: owner, position: position })
+  };
+
   exports.onclientdisconnect = (id) => {
     // Only report disconnection of players which have sent greet
+    console.log("[ "+ id + "] disconnect, players list " + JSON.stringify(globalState.players));
     if (globalState.players[id]) {
+      // Check for owned pickups
+      for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+        if (globalState.pickups[i].owner == id) {
+          // calculate drop position (just player position for now)
+          let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
+
+          // re-enable world pickup
+          for (let j = 0, n = world.pickups.length; j < n; j++) {
+            let pickup = world.pickups[j];
+            if (pickup.id == globalState.pickups[i].id) {
+              pickup.enabled = true;
+              Maths.vec3.copy(pickup.position, dropPosition);
+              break;
+            }
+          }
+
+          // update global state pickup
+          globalState.pickups[i].owner = null;
+          globalState.pickups[i].position = dropPosition;
+        }
+      }
+
+      // Remove from state
       globalState.players[id] = null;
       distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
     }

@@ -86,9 +86,9 @@ let WorldVisuals = module.exports = (function() {
       });
     }
 
-    let createCore = function(material, position) {
+    let createCore = function(material, pickup) {
       // TODO: Add a rotator and a bob component
-      return scene.add({ mesh: coreMesh, material: material, position: position });
+      return scene.add({ mesh: coreMesh, material: material, position: pickup.position, rotation: pickup.rotation });
     };
 
     let pickups = world.pickups;
@@ -96,16 +96,16 @@ let WorldVisuals = module.exports = (function() {
       let pickup = pickups[i];
       switch(pickup.visualId) {
         case Pickup.visualIds.REDCORE:
-          pickup.visual = createCore(redMaterial, pickup.position);
+          pickup.visual = createCore(redMaterial, pickup);
           break;
         case Pickup.visualIds.BLUECORE:
-          pickup.visual = createCore(blueMaterial, pickup.position);
+          pickup.visual = createCore(blueMaterial, pickup);
           break;
         case Pickup.visualIds.YELLOWCORE:
-          pickup.visual = createCore(yellowMaterial, pickup.position);
+          pickup.visual = createCore(yellowMaterial, pickup);
           break;
         case Pickup.visualIds.GREENCORE:
-          pickup.visual = createCore(greenMaterial, pickup.position);
+          pickup.visual = createCore(greenMaterial, pickup);
           break;
       }
     }

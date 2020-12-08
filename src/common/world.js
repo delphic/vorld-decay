@@ -39,6 +39,7 @@ let World = module.exports = (function() {
     world.boxes = [];
     world.teleporters = [];
     world.pickups = [];
+    world.initialSpawnPosition = [0, 1, 0];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {

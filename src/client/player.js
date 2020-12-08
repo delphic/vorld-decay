@@ -240,6 +240,13 @@ let Player = module.exports = (function() {
       }
       player.controller.yMove(player.yVelocity * elapsed);
 
+      if (player.heldItem) {
+        // TODO: Define offset point?
+        vec3.scaleAndAdd(player.heldItem.position, player.position, player.localZ, -0.5);
+        quat.copy(player.heldItem.rotation, player.rotation);
+        //vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 1);
+      }
+
       if (!player.isReplica) {
         // Update Update Message and set dirty flag
         if (!vec3.equals(player.updateMessage.position, player.position) || !quat.equals(player.updateMessage.rotation, player.rotation)) {

@@ -137,6 +137,7 @@ let GameClient = module.exports = (function(){
         break;
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
+        dropPickups(message.id);
         despawnPlayer(message.id);
         break;
       case MessageType.POSITION:
@@ -144,15 +145,7 @@ let GameClient = module.exports = (function(){
         updatePlayer(message.id, message);
         break;
       case MessageType.PICKUP:
-        // Find pickup and assign it to player
-        for (let i = 0, l = world.pickups.length; i < l; i++) {
-          let pickup = world.pickups[i];
-          if (pickup.id == message.pickupId) {
-            pickup.enable = false;
-            pickup.visual.active = false;
-            // TODO: Attach to the player with message id - either display on their person or show in a 3D hud
-          }
-        }
+        assignPickup(message.pickupId, message.id);
         break;
     }
   };
@@ -179,6 +172,50 @@ let GameClient = module.exports = (function(){
         }
       }
     }
+
+    // Handle Pickups
+    for (let i = 0, l = state.pickups.length; i < l; i++) {
+      if (state.pickups[i].owner != null) {
+        assignPickup(state.pickups[i].id, state.pickups[i].owner);
+      } else {
+        let pickup = getPickup(state.pickups[i].id);
+        if (pickup) {
+          vec3.copy(pickup.position, state.pickups[i].position);
+        }
+      }
+    }
+  };
+
+  // We should probably move these get methods to world
+  let getPickup = (pickupId) => {
+    for (let i = 0, l = world.pickups.length; i < l; i++) {
+      if (world.pickups[i].id == pickupId) {
+        return world.pickups[i];
+      }
+    }
+    return null;
+  };
+
+  let assignPickup = (pickupId, playerId) => {
+    let pickup = getPickup(pickupId);
+    if (pickup) {
+      pickup.enabled = false;
+      let player = getPlayer(playerId);
+      if (player) {
+        player.heldItem = pickup;
+      } else {
+        pickup.visual.active = false;
+      }
+    }
+  };
+
+  let dropPickups = (playerId) => {
+    let player = getPlayer(playerId);
+    if (player && player.heldItem) {
+      player.heldItem.enabled = true;
+      vec3.copy(player.heldItem.position, player.position);
+      // TODO: Cast to floor, use world method
+    }
   };
 
   let spawnPlayer = (id, player) => {
@@ -200,6 +237,15 @@ let GameClient = module.exports = (function(){
       replica.visuals = PlayerVisuals.create(replica, scene);
       players.push(replica);
     }
+  };
+
+  let getPlayer = (id) => {
+    for (let i = 0, l = players.length; i < l; i++) {
+      if (players[i] && players[i].id == id) {
+        return players[i];
+      }
+    }
+    return null;
   };
 
   let updatePlayer = (id, message) => {

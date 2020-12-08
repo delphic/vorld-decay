@@ -2722,6 +2722,7 @@ let GameClient = module.exports = (function(){
         break;
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
+        dropPickups(message.id);
         despawnPlayer(message.id);
         break;
       case MessageType.POSITION:
@@ -2729,15 +2730,7 @@ let GameClient = module.exports = (function(){
         updatePlayer(message.id, message);
         break;
       case MessageType.PICKUP:
-        // Find pickup and assign it to player
-        for (let i = 0, l = world.pickups.length; i < l; i++) {
-          let pickup = world.pickups[i];
-          if (pickup.id == message.pickupId) {
-            pickup.enable = false;
-            pickup.visual.active = false;
-            // TODO: Attach to the player with message id - either display on their person or show in a 3D hud
-          }
-        }
+        assignPickup(message.pickupId, message.id);
         break;
     }
   };
@@ -2764,6 +2757,50 @@ let GameClient = module.exports = (function(){
         }
       }
     }
+
+    // Handle Pickups
+    for (let i = 0, l = state.pickups.length; i < l; i++) {
+      if (state.pickups[i].owner != null) {
+        assignPickup(state.pickups[i].id, state.pickups[i].owner);
+      } else {
+        let pickup = getPickup(state.pickups[i].id);
+        if (pickup) {
+          vec3.copy(pickup.position, state.pickups[i].position);
+        }
+      }
+    }
+  };
+
+  // We should probably move these get methods to world
+  let getPickup = (pickupId) => {
+    for (let i = 0, l = world.pickups.length; i < l; i++) {
+      if (world.pickups[i].id == pickupId) {
+        return world.pickups[i];
+      }
+    }
+    return null;
+  };
+
+  let assignPickup = (pickupId, playerId) => {
+    let pickup = getPickup(pickupId);
+    if (pickup) {
+      pickup.enabled = false;
+      let player = getPlayer(playerId);
+      if (player) {
+        player.heldItem = pickup;
+      } else {
+        pickup.visual.active = false;
+      }
+    }
+  };
+
+  let dropPickups = (playerId) => {
+    let player = getPlayer(playerId);
+    if (player && player.heldItem) {
+      player.heldItem.enabled = true;
+      vec3.copy(player.heldItem.position, player.position);
+      // TODO: Cast to floor, use world method
+    }
   };
 
   let spawnPlayer = (id, player) => {
@@ -2785,6 +2822,15 @@ let GameClient = module.exports = (function(){
       replica.visuals = PlayerVisuals.create(replica, scene);
       players.push(replica);
     }
+  };
+
+  let getPlayer = (id) => {
+    for (let i = 0, l = players.length; i < l; i++) {
+      if (players[i] && players[i].id == id) {
+        return players[i];
+      }
+    }
+    return null;
   };
 
   let updatePlayer = (id, message) => {
@@ -3092,6 +3138,13 @@ let Player = module.exports = (function() {
         player.yVelocity -= 9.8 * elapsed;
       }
       player.controller.yMove(player.yVelocity * elapsed);
+
+      if (player.heldItem) {
+        // TODO: Define offset point?
+        vec3.scaleAndAdd(player.heldItem.position, player.position, player.localZ, -0.5);
+        quat.copy(player.heldItem.rotation, player.rotation);
+        //vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 1);
+      }
 
       if (!player.isReplica) {
         // Update Update Message and set dirty flag
@@ -3498,9 +3551,9 @@ let WorldVisuals = module.exports = (function() {
       });
     }
 
-    let createCore = function(material, position) {
+    let createCore = function(material, pickup) {
       // TODO: Add a rotator and a bob component
-      return scene.add({ mesh: coreMesh, material: material, position: position });
+      return scene.add({ mesh: coreMesh, material: material, position: pickup.position, rotation: pickup.rotation });
     };
 
     let pickups = world.pickups;
@@ -3508,16 +3561,16 @@ let WorldVisuals = module.exports = (function() {
       let pickup = pickups[i];
       switch(pickup.visualId) {
         case Pickup.visualIds.REDCORE:
-          pickup.visual = createCore(redMaterial, pickup.position);
+          pickup.visual = createCore(redMaterial, pickup);
           break;
         case Pickup.visualIds.BLUECORE:
-          pickup.visual = createCore(blueMaterial, pickup.position);
+          pickup.visual = createCore(blueMaterial, pickup);
           break;
         case Pickup.visualIds.YELLOWCORE:
-          pickup.visual = createCore(yellowMaterial, pickup.position);
+          pickup.visual = createCore(yellowMaterial, pickup);
           break;
         case Pickup.visualIds.GREENCORE:
-          pickup.visual = createCore(greenMaterial, pickup.position);
+          pickup.visual = createCore(greenMaterial, pickup);
           break;
       }
     }
@@ -3582,12 +3635,12 @@ let GameServer = module.exports = (function() {
   // Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
   let sendMessage, distributeMessage;
 
-  let initialSpawnPosition = [0, 1, 0];
-  // TODO: going to need some level management code!
-
   // This is information which needs to be sent on client connection
+  // Holds DTOs, rather than actual world objects, might be good to call
+  // them as such and have classes for them
   let globalState = {
-    players: []
+    players: [],
+    pickups: []
   };
   let world = World.create();
 
@@ -3608,7 +3661,7 @@ let GameServer = module.exports = (function() {
       case MessageType.GREET:
         let nick = message.nick;
         if (!nick) nick = "Player " + (id + 1);
-        globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
+        globalState.players[id] = { id: id, nick: nick, position: world.initialSpawnPosition };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
       case MessageType.PICKUP:
@@ -3618,6 +3671,7 @@ let GameServer = module.exports = (function() {
           if (pickup.canPickup(message.position)) {
             // This player should pickup the object!
             pickup.enabled = false;
+            globalState.pickups.push({ id: pickup.id, owner: id, position: null });
             distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
           }
         }
@@ -3660,7 +3714,8 @@ let GameServer = module.exports = (function() {
             if (pickup.autoPickup && pickup.canPickup(message.position)) {
               // This player should pickup the object!
               pickup.enabled = false;
-              distributeMessage(-1, { id: message.id, type: MessageType.PICKUP, pickupId: pickup.id });
+              setPickupGlobalState(pickup.id, id);
+              distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
             }
           }
         }
@@ -3672,9 +3727,44 @@ let GameServer = module.exports = (function() {
     }
   };
 
+  let setPickupGlobalState = (id, owner) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].id == id) {
+        globalState.pickups[i].owner = owner;
+        globalState.pickups[i].position = null;
+        return;
+      }
+    }
+    globalState.pickups.push({ id: id, owner: owner, position: position })
+  };
+
   exports.onclientdisconnect = (id) => {
     // Only report disconnection of players which have sent greet
+    console.log("[ "+ id + "] disconnect, players list " + JSON.stringify(globalState.players));
     if (globalState.players[id]) {
+      // Check for owned pickups
+      for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+        if (globalState.pickups[i].owner == id) {
+          // calculate drop position (just player position for now)
+          let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
+
+          // re-enable world pickup
+          for (let j = 0, n = world.pickups.length; j < n; j++) {
+            let pickup = world.pickups[j];
+            if (pickup.id == globalState.pickups[i].id) {
+              pickup.enabled = true;
+              Maths.vec3.copy(pickup.position, dropPosition);
+              break;
+            }
+          }
+
+          // update global state pickup
+          globalState.pickups[i].owner = null;
+          globalState.pickups[i].position = dropPosition;
+        }
+      }
+
+      // Remove from state
       globalState.players[id] = null;
       distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
     }
@@ -4101,6 +4191,7 @@ let World = module.exports = (function() {
     world.boxes = [];
     world.teleporters = [];
     world.pickups = [];
+    world.initialSpawnPosition = [0, 1, 0];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
