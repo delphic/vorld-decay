@@ -51,7 +51,7 @@ let GameServer = module.exports = (function() {
           if (pickup.canPickup(message.position)) {
             // This player should pickup the object!
             pickup.enabled = false;
-            globalState.pickups.push({ id: pickup.id, owner: id, position: null });
+            setPickupGlobalState(pickup.id, id);
             distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
           }
         }
@@ -115,12 +115,11 @@ let GameServer = module.exports = (function() {
         return;
       }
     }
-    globalState.pickups.push({ id: id, owner: owner, position: position })
+    globalState.pickups.push({ id: id, owner: owner, position: null })
   };
 
   exports.onclientdisconnect = (id) => {
     // Only report disconnection of players which have sent greet
-    console.log("[ "+ id + "] disconnect, players list " + JSON.stringify(globalState.players));
     if (globalState.players[id]) {
       // Check for owned pickups
       for (let i = 0, l = globalState.pickups.length; i < l; i++) {
