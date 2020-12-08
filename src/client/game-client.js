@@ -53,7 +53,7 @@ let GameClient = module.exports = (function(){
     window.addEventListener('resize', updateCanvasSize);
     updateCanvasSize();
 
-    Fury.init("fury"); // Consider anti-alias false
+    Fury.init("fury"); // Consider { antialias: false }
 
     // Start loading required assets
     PlayerVisuals.init();

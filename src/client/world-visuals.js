@@ -26,7 +26,7 @@ let WorldVisuals = module.exports = (function() {
     atlasMaterial.loadTexture = (src, cb) => {
       let image = new Image();
       image.onload = () => {
-        let texture = Fury.Renderer.createTextureArray(image, 64, 64, 13, "pixel", true);
+        let texture = Fury.Renderer.createTextureArray(image, 64, 64, 13, "pixel", true); // "low"/"pixel" quality depending on if going purposefully low res
         // TODO: 13 is based on vorld config, so should actually base it off that
       	atlasMaterial.textures["uSampler"] = texture;
       	atlasMaterial.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1

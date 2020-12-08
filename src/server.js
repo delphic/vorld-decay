@@ -28,6 +28,13 @@ GameServer.init(
   (id, message) => { Connections.distribute(id, JSON.stringify(message)); }
 );
 
+// If we want to run a 'gameloop' we would use setImmediate
+// https://nodejs.org/en/docs/guides/event-loop-timers-and-nexttick/
+// However I'm mildly concerned this will have a performance impact on the hw
+// which is also running delphic.me.uk so unless we host a separate VPS for that
+// we might prefer to stick to responding in events and relying on clients to
+// react appropriately for now.
+
 app.ws("/*", {
   idleTimeout: idleTimeout,
   maxBackpressure: 1024,	// NOTE: A web socket won't "publish" messages but will send them if backpressure reached
