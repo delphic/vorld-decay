@@ -53,29 +53,14 @@ let World = module.exports = (function() {
           let block = VorldConfig.BlockIds.STONE_BLOCKS;
 
           // Placeholder level creation
-          // Create AABBs manually until we get collision working against chunks
-          // NOTE: Voxels are at center of their coordinates... not sure how wise this is really.
 
           // walls
-          world.addBox(-4,5, 0,4, 5,6);
           fill(-4,4, 0,3, 5,5, block);
-
-          world.addBox(-4,5, 0,4, -5,-4);
           fill(-4,4, 0,3, -5,-5, block);
-
-          world.addBox(5,6, 0,4, -4,5);
           fill(5,5, 0,3, -4,4, block);
-
-          world.addBox(-5,-4, 0,4, -4,5);
           fill(-5,-5, 0,3, -4,4, block);
-
-          world.addBox(-4,5, -1,0, -4,5); // floor
           fill(-4,4, -1,-1, -4,4, block);
-
-          world.addBox(-4,5, 4,5, -4,5);  // roof
           fill(-4,4, 4,4, -4,4, block);
-
-          world.addBox(0,1,0,1,0,1);  // Test Block
           fill(0,0, 0,0, 0,0, block);
 
           // test steps

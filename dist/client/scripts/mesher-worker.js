@@ -605,12 +605,14 @@ let Chunk = require('./chunk');
 let Vorld = module.exports = (function() {
   var exports = {};
 
+  // TODO: Try keying on something we can build without garbage allocation?
+
   exports.addChunk = function(vorld, chunk, i, j, k) {
-    vorld.chunks[i+"_"+j+"_"+k] = chunk;
+    vorld.chunks[i+"_"+j+"_"+k] = chunk;  // Also garbage allocation but not as bad as in get
     chunk.indices = [i, j, k];
   };
   exports.getChunk = function(vorld, i, j, k) {
-    var key = i+"_"+j+"_"+k;
+    var key = i+"_"+j+"_"+k;  // You monster - garbage allocation everywhere
     if (vorld.chunks[key]) {
         return vorld.chunks[key];
     }

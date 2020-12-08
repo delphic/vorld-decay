@@ -208,7 +208,7 @@ let Player = module.exports = (function() {
       vec3.scaleAndAdd(movementDelta, movementDelta, player.localX, ldx);
 
       // Movement
-      player.controller.move(movementDelta);
+      player.controller.xzMove(movementDelta);
 
       // Gravity
       if (!player.jumping && player.jumpInput) {
