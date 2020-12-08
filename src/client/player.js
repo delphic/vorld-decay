@@ -88,7 +88,7 @@ let Player = module.exports = (function() {
         player.requestPickup = true;
       }
 
-      player.jumpInput = Fury.Input.keyDown("Space");
+      player.jumpInput = Fury.Input.keyDown("Space", true);
 
       if (player.updateMessage.input[0] != player.input[0]
         || player.updateMessage.input[1] != player.input[1]
