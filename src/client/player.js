@@ -83,6 +83,11 @@ let Player = module.exports = (function() {
     		player.input[0] += 1;
     	}
 
+      // Pickup / Use Input
+      if (Fury.Input.keyDown("e", true)) {
+        player.requestPickup = true;
+      }
+
       player.jumpInput = Fury.Input.keyDown("Space");
 
       if (player.updateMessage.input[0] != player.input[0]
@@ -102,6 +107,12 @@ let Player = module.exports = (function() {
       jump: false,
       yVelocity: 0
     };
+
+    player.pickupMessage = {
+      type: MessageType.PICKUP,
+      position: [0,0,0]
+    };
+    player.requestPickup = false;
 
     player.id = params.id;
     player.snapCamera = true;
@@ -157,6 +168,10 @@ let Player = module.exports = (function() {
       if (!player.isReplica) {
         detectInput(); // Note handles setting player.inputDirty
       } // else was set by server
+
+      if (player.requestPickup) {
+        vec3.copy(player.pickupMessage.position, player.position);  // Q: is it worth us rounding to 2dp to reduce weight?
+      }
 
       // Rotation
       if (player.isReplica) {

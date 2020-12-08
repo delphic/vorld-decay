@@ -44,26 +44,59 @@ let GameServer = module.exports = (function() {
         globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
-      case MessageType.POSITION:
+      case MessageType.PICKUP:
+        // Expect position, run through pickups and try to pickup
+        for (let i = 0, l = world.pickups.length; i < l; i++) {
+          let pickup = world.pickups[i];
+          if (pickup.canPickup(message.position)) {
+            // This player should pickup the object!
+            pickup.enabled = false;
+            distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+          }
+        }
+        break;
+      case MessageType.POSITION:  // This is more a player transform / input sync
         message.id = id;
+
+        let hasPositionChanged = Maths.vec3.equals(message.position, globalState.players[id].position);
+        globalState.players[id].position = message.position;
 
         // Check for teleporter collision
         let shouldTeleport = false;
-        for (let i = 0, l = world.teleporters.length; i < l; i++) {
-          let teleporter = world.teleporters[i];
-          // Ideally would have player concept on server now and could use it's AABB
-          if (Bounds.contains(message.position, teleporter.bounds)) {
-            shouldTeleport = true;
-            // TODO: Not instant teleport please - requires game loop server side or some way to defer
-            Maths.vec3.copy(message.position, teleporter.targetPosition);
-            Maths.quat.copy(message.rotation, teleporter.targetRotation);
-            message.snapLook = true;
+        if (hasPositionChanged) {
+          for (let i = 0, l = world.teleporters.length; i < l; i++) {
+            let teleporter = world.teleporters[i];
+            // Ideally would have player concept on server now and could use it's AABB
+            if (Bounds.contains(message.position, teleporter.bounds)) {
+              shouldTeleport = true;
+              // TODO: Not instant teleport please - requires game loop server side or some way to defer
+              Maths.vec3.copy(message.position, teleporter.targetPosition);
+              Maths.quat.copy(message.rotation, teleporter.targetRotation);
+              message.snapLook = true;
+            }
           }
         }
 
-        globalState.players[id].position = message.position;
-        distributeMessage(shouldTeleport ? -1 : id, message); // TODO: Relevancy / Spacial Partitioning plz (could do this by section)
+        // Message all others if no teleport, return message to sender as well as other players if teleporting
+        if (shouldTeleport) {
+          // Distribute to everyone
+          distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
+        } else {
+          // Distribute to other players
+          distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
+        }
 
+        // Check for pickups
+        if (hasPositionChanged) {
+          for (let i = 0, l = world.pickups.length; i < l; i++) {
+            let pickup = world.pickups[i];
+            if (pickup.autoPickup && pickup.canPickup(message.position)) {
+              // This player should pickup the object!
+              pickup.enabled = false;
+              distributeMessage(-1, { id: message.id, type: MessageType.PICKUP, pickupId: pickup.id });
+            }
+          }
+        }
         break;
       default:
         message.id = id;

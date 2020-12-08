@@ -1,12 +1,16 @@
 let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
+let Pickup = require('../common/pickup');
 let vec3 = Fury.Maths.vec3;
 
 let WorldVisuals = module.exports = (function() {
   let exports = {};
 
   let atlasMaterial, debugMaterial;
+  let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
+  let coreMesh;
+
   let chunkObjects = [];
 
   exports.init = (callback) => {
@@ -19,6 +23,19 @@ let WorldVisuals = module.exports = (function() {
         callback();
       }
     };
+
+    // Placeholder core visuals
+    coreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
+    let unlitColorShader = Fury.Shader.create(Shaders.UnlitColor);
+    // TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
+    redMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial.color = vec3.fromValues(0.9, 0, 0.1);
+    blueMaterial = Fury.Material.create({ shader: unlitColorShader });
+    blueMaterial.color = vec3.fromValues(0, 0.7, 0.9);
+    yellowMaterial = Fury.Material.create({ shader: unlitColorShader });
+    yellowMaterial.color = vec3.fromValues(0.9, 0.9, 0);
+    greenMaterial = Fury.Material.create({ shader: unlitColorShader });
+    greenMaterial.color = vec3.fromValues(0.1, 0.9, 0);
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
     // So this init needs to be called after Fury.init
@@ -53,22 +70,48 @@ let WorldVisuals = module.exports = (function() {
     debugMaterial.loadTexture("/images/checkerboard.png", loadCallback);
   };
 
-  exports.generateVisuals = (level, vorld, scene, callback) => {
+  exports.generateVisuals = (world, scene, callback) => {
     // Debug meshes
-    if (level) {
-      for (let i = 0, l = level.length; i < l; i++) {
-        let meshData = Primitives.createCuboidMesh(level[i].size[0], level[i].size[1], level[i].size[2]);
-        let mesh = Fury.Mesh.create(meshData);
-        // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-        level.visuals = scene.add({
-          mesh: mesh,
-          position: level[i].center,
-          static: true,
-          material: debugMaterial
-        });
+    let boxes = world.boxes;
+    for (let i = 0, l = boxes.length; i < l; i++) {
+      let box = boxes[i];
+      let meshData = Primitives.createCuboidMesh(box.size[0], box.size[1], box.size[2]);
+      let mesh = Fury.Mesh.create(meshData);
+      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+      box.visuals = scene.add({
+        mesh: mesh,
+        position: box.center,
+        static: true,
+        material: debugMaterial
+      });
+    }
+
+    let createCore = function(material, position) {
+      // TODO: Add a rotator and a bob component
+      return scene.add({ mesh: coreMesh, material: material, position: position });
+    };
+
+    let pickups = world.pickups;
+    for (let i = 0, l = pickups.length; i < l; i++) {
+      let pickup = pickups[i];
+      switch(pickup.visualId) {
+        case Pickup.visualIds.REDCORE:
+          pickup.visual = createCore(redMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.BLUECORE:
+          pickup.visual = createCore(blueMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.YELLOWCORE:
+          pickup.visual = createCore(yellowMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.GREENCORE:
+          pickup.visual = createCore(greenMaterial, pickup.position);
+          break;
       }
     }
 
+
+    let vorld = world.vorld;
     if (!vorld) {
       return;
     }

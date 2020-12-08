@@ -4,6 +4,7 @@ let Maths = Fury.Maths;
 let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
+let Pickup = require('./pickup');
 
 let World = module.exports = (function() {
   // Contains AABBs of the world environment
@@ -37,6 +38,7 @@ let World = module.exports = (function() {
     world.vorld = vorld;
     world.boxes = [];
     world.teleporters = [];
+    world.pickups = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -80,6 +82,16 @@ let World = module.exports = (function() {
       world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
+    let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
+      world.pickups.push(Pickup.create({
+        id: id,
+        visualId: visualId,
+        position: vec3.fromValues(x,y,z),
+        radius: radius,
+        autoPickup: !!autoPickup
+      }));
+    };
+
     let createTestSteps = function(level) {
       // test steps!
       level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
@@ -87,12 +99,12 @@ let World = module.exports = (function() {
     };
 
     world.createLevel = (levelName) => {
-      let level = [];
       switch(levelName) {
         case "test":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
           createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+          createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);
@@ -102,8 +114,9 @@ let World = module.exports = (function() {
           createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
           break;
       }
-      return level;
     };
+
+    // TODO: Create spawn mehtods with listeners
 
     return world;
   };

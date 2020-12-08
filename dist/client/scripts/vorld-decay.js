@@ -428,7 +428,8 @@ var Input = module.exports = function() {
 	var exports = {};
 
 	var pointerLocked = false;
-	var mouseState = [], currentlyPressedKeys = [];
+	var mouseState = [], currentlyPressedKeys = [];	// probably shouldn't use arrays lots of empty space
+	var downKeys = [], upKeys = []; // Keys pressed or released this frame
 	var canvas;
 	var init = exports.init = function(targetCanvas) {
 			canvas = targetCanvas;
@@ -449,12 +450,6 @@ var Input = module.exports = function() {
 			window.addEventListener("blur", handleBlur);
 	};
 
-	exports.handleFrameFinished = function() {
-		// TODO: Use this to track keyDown, keyPressed and keyUp separately
-		MouseDelta[0] = 0;
-		MouseDelta[1] = 0;
-	};
-
 	exports.isPointerLocked = function() {
 		return pointerLocked;
 	};
@@ -470,7 +465,7 @@ var Input = module.exports = function() {
 	// querying as well, although the option of just subscribing to the events
 	// in game code is also there but need to use DescriptionToKeyCode
 
-	var keyDown = exports.keyDown = function(key) {
+	var keyPressed = function(key) {
 		if (!isNaN(key) && !key.length) {
 			return currentlyPressedKeys[key];
 		}
@@ -480,6 +475,36 @@ var Input = module.exports = function() {
 		}
 		else {
 			return false;
+		}
+	};
+
+	var keyUp = exports.keyUp = function(key) {
+		if (!isNaN(key) && !key.length) {
+			return upKeys[key];
+		}
+		else if (key) {
+			var map = DescriptionToKeyCode[key];
+			return (map) ? !!upKeys[map] : false;
+		}
+		else {
+			return false;
+		}
+	};
+
+	var keyDown = exports.keyDown = function(key, thisFrame) {
+		if (!thisFrame) {
+			return keyPressed(key);
+		} else {
+			if (!isNaN(key) && !key.length) {
+				return downKeys[key];
+			}
+			else if (key) {
+				var map = DescriptionToKeyCode[key];
+				return (map) ? !!downKeys[map] : false;
+			}
+			else {
+				return false;
+			}
 		}
 	};
 
@@ -496,16 +521,27 @@ var Input = module.exports = function() {
 		}
 	};
 
+	exports.handleFrameFinished = function() {
+		MouseDelta[0] = 0;
+		MouseDelta[1] = 0;
+		downKeys.length = 0;
+		upKeys.length = 0;
+	};
+
 	var handleKeyDown = function(event) {
+		downKeys[event.keyCode] = true;
 		currentlyPressedKeys[event.keyCode] = true;
 	};
 
 	var handleKeyUp = function(event) {
 		currentlyPressedKeys[event.keyCode] = false;
+		upKeys[event.keyCode] = true;
 	};
 
 	var handleBlur = function(event) {
+		downKeys.length = 0;
 		currentlyPressedKeys.length = 0;
+		upKeys.length = 0;	// Q: Should we be copying currently pressed Keys as they've kinda been released?
 	};
 
 	var handleMouseMove = function(event) {
@@ -1118,7 +1154,7 @@ var Physics = module.exports = (function(){
   // For now a box is an AABB - in future we'll need to allow rotation
   var Box = exports.Box = require('./bounds');
 
-  var Sphere =exports.Sphere = (function() {
+  var Sphere = exports.Sphere = (function() {
   	let exports = {};
   	let prototype = {};
 
@@ -1146,7 +1182,11 @@ var Physics = module.exports = (function(){
   		} else {
   			sphere.center = vec3.create();
   		}
-  		sphere.radius = parameters.radius | 0;
+      if (parameters.radius) {
+        sphere.radius = parameters.radius;
+      } else {
+        sphere.radius = 0;
+      }
 
   		return sphere;
   	};
@@ -2124,7 +2164,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":18,"./client/game-client":19,"./common/game-server":25,"./common/websocket-close-codes":30}],17:[function(require,module,exports){
+},{"./client/connection":18,"./client/game-client":19,"./common/game-server":25,"./common/websocket-close-codes":31}],17:[function(require,module,exports){
 // Character Controller handles physics and movement for characters (players)
 let Fury = require('../../fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
@@ -2458,7 +2498,7 @@ var CharacterController = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":29}],18:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":30}],18:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2634,7 +2674,13 @@ let GameClient = module.exports = (function(){
     }
 
     if (localPlayer) {
-      // Update Camera - TODO: Add offset rather than centered camera
+      // Check for request pickup and send pickup message
+      if (localPlayer.requestPickup) {
+        localPlayer.requestPickup = false;
+        sendMessage(localPlayer.pickupMessage);
+      }
+
+      // Update Camera
       vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
       if (localPlayer.snapCamera) {
         vec3.copy(camera.position, camera.targetPosition);
@@ -2674,11 +2720,21 @@ let GameClient = module.exports = (function(){
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
         despawnPlayer(message.id);
-        // TODO: Despawn player visuals and remove from player list
         break;
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         updatePlayer(message.id, message);
+        break;
+      case MessageType.PICKUP:
+        // Find pickup and assign it to player
+        for (let i = 0, l = world.pickups.length; i < l; i++) {
+          let pickup = world.pickups[i];
+          if (pickup.id == message.pickupId) {
+            pickup.enable = false;
+            pickup.visual.active = false;
+            // TODO: Attach to the player with message id - either display on their person or show in a 3D hud
+          }
+        }
         break;
     }
   };
@@ -2691,7 +2747,7 @@ let GameClient = module.exports = (function(){
     var level = world.createLevel(serverState.level);
 
     // Add world objects to render scene
-    WorldVisuals.generateVisuals(level, world.vorld, scene, () => {
+    WorldVisuals.generateVisuals(world, scene, () => {
       // World visuals instanitated - could defer player spawn until this point
     });
 
@@ -2759,7 +2815,7 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":26,"../common/world":31,"./player":21,"./player-visuals":20,"./world-visuals":24}],20:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":26,"../common/world":32,"./player":21,"./player-visuals":20,"./world-visuals":24}],20:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
@@ -2877,6 +2933,11 @@ let Player = module.exports = (function() {
     		player.input[0] += 1;
     	}
 
+      // Pickup / Use Input
+      if (Fury.Input.keyDown("e", true)) {
+        player.requestPickup = true;
+      }
+
       player.jumpInput = Fury.Input.keyDown("Space");
 
       if (player.updateMessage.input[0] != player.input[0]
@@ -2896,6 +2957,12 @@ let Player = module.exports = (function() {
       jump: false,
       yVelocity: 0
     };
+
+    player.pickupMessage = {
+      type: MessageType.PICKUP,
+      position: [0,0,0]
+    };
+    player.requestPickup = false;
 
     player.id = params.id;
     player.snapCamera = true;
@@ -2951,6 +3018,10 @@ let Player = module.exports = (function() {
       if (!player.isReplica) {
         detectInput(); // Note handles setting player.inputDirty
       } // else was set by server
+
+      if (player.requestPickup) {
+        vec3.copy(player.pickupMessage.position, player.position);  // Q: is it worth us rounding to 2dp to reduce weight?
+      }
 
       // Rotation
       if (player.isReplica) {
@@ -3339,12 +3410,16 @@ var Shaders = module.exports = (function() {
 let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
+let Pickup = require('../common/pickup');
 let vec3 = Fury.Maths.vec3;
 
 let WorldVisuals = module.exports = (function() {
   let exports = {};
 
   let atlasMaterial, debugMaterial;
+  let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
+  let coreMesh;
+
   let chunkObjects = [];
 
   exports.init = (callback) => {
@@ -3357,6 +3432,19 @@ let WorldVisuals = module.exports = (function() {
         callback();
       }
     };
+
+    // Placeholder core visuals
+    coreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
+    let unlitColorShader = Fury.Shader.create(Shaders.UnlitColor);
+    // TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
+    redMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial.color = vec3.fromValues(0.9, 0, 0.1);
+    blueMaterial = Fury.Material.create({ shader: unlitColorShader });
+    blueMaterial.color = vec3.fromValues(0, 0.7, 0.9);
+    yellowMaterial = Fury.Material.create({ shader: unlitColorShader });
+    yellowMaterial.color = vec3.fromValues(0.9, 0.9, 0);
+    greenMaterial = Fury.Material.create({ shader: unlitColorShader });
+    greenMaterial.color = vec3.fromValues(0.1, 0.9, 0);
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
     // So this init needs to be called after Fury.init
@@ -3391,22 +3479,48 @@ let WorldVisuals = module.exports = (function() {
     debugMaterial.loadTexture("/images/checkerboard.png", loadCallback);
   };
 
-  exports.generateVisuals = (level, vorld, scene, callback) => {
+  exports.generateVisuals = (world, scene, callback) => {
     // Debug meshes
-    if (level) {
-      for (let i = 0, l = level.length; i < l; i++) {
-        let meshData = Primitives.createCuboidMesh(level[i].size[0], level[i].size[1], level[i].size[2]);
-        let mesh = Fury.Mesh.create(meshData);
-        // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-        level.visuals = scene.add({
-          mesh: mesh,
-          position: level[i].center,
-          static: true,
-          material: debugMaterial
-        });
+    let boxes = world.boxes;
+    for (let i = 0, l = boxes.length; i < l; i++) {
+      let box = boxes[i];
+      let meshData = Primitives.createCuboidMesh(box.size[0], box.size[1], box.size[2]);
+      let mesh = Fury.Mesh.create(meshData);
+      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+      box.visuals = scene.add({
+        mesh: mesh,
+        position: box.center,
+        static: true,
+        material: debugMaterial
+      });
+    }
+
+    let createCore = function(material, position) {
+      // TODO: Add a rotator and a bob component
+      return scene.add({ mesh: coreMesh, material: material, position: position });
+    };
+
+    let pickups = world.pickups;
+    for (let i = 0, l = pickups.length; i < l; i++) {
+      let pickup = pickups[i];
+      switch(pickup.visualId) {
+        case Pickup.visualIds.REDCORE:
+          pickup.visual = createCore(redMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.BLUECORE:
+          pickup.visual = createCore(blueMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.YELLOWCORE:
+          pickup.visual = createCore(yellowMaterial, pickup.position);
+          break;
+        case Pickup.visualIds.GREENCORE:
+          pickup.visual = createCore(greenMaterial, pickup.position);
+          break;
       }
     }
 
+
+    let vorld = world.vorld;
     if (!vorld) {
       return;
     }
@@ -3447,7 +3561,7 @@ let WorldVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./primitives":22,"./shaders":23}],25:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/pickup":27,"./primitives":22,"./shaders":23}],25:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -3494,26 +3608,59 @@ let GameServer = module.exports = (function() {
         globalState.players[id] = { id: id, nick: nick, position: initialSpawnPosition };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
-      case MessageType.POSITION:
+      case MessageType.PICKUP:
+        // Expect position, run through pickups and try to pickup
+        for (let i = 0, l = world.pickups.length; i < l; i++) {
+          let pickup = world.pickups[i];
+          if (pickup.canPickup(message.position)) {
+            // This player should pickup the object!
+            pickup.enabled = false;
+            distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+          }
+        }
+        break;
+      case MessageType.POSITION:  // This is more a player transform / input sync
         message.id = id;
+
+        let hasPositionChanged = Maths.vec3.equals(message.position, globalState.players[id].position);
+        globalState.players[id].position = message.position;
 
         // Check for teleporter collision
         let shouldTeleport = false;
-        for (let i = 0, l = world.teleporters.length; i < l; i++) {
-          let teleporter = world.teleporters[i];
-          // Ideally would have player concept on server now and could use it's AABB
-          if (Bounds.contains(message.position, teleporter.bounds)) {
-            shouldTeleport = true;
-            // TODO: Not instant teleport please - requires game loop server side or some way to defer
-            Maths.vec3.copy(message.position, teleporter.targetPosition);
-            Maths.quat.copy(message.rotation, teleporter.targetRotation);
-            message.snapLook = true;
+        if (hasPositionChanged) {
+          for (let i = 0, l = world.teleporters.length; i < l; i++) {
+            let teleporter = world.teleporters[i];
+            // Ideally would have player concept on server now and could use it's AABB
+            if (Bounds.contains(message.position, teleporter.bounds)) {
+              shouldTeleport = true;
+              // TODO: Not instant teleport please - requires game loop server side or some way to defer
+              Maths.vec3.copy(message.position, teleporter.targetPosition);
+              Maths.quat.copy(message.rotation, teleporter.targetRotation);
+              message.snapLook = true;
+            }
           }
         }
 
-        globalState.players[id].position = message.position;
-        distributeMessage(shouldTeleport ? -1 : id, message); // TODO: Relevancy / Spacial Partitioning plz (could do this by section)
+        // Message all others if no teleport, return message to sender as well as other players if teleporting
+        if (shouldTeleport) {
+          // Distribute to everyone
+          distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
+        } else {
+          // Distribute to other players
+          distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
+        }
 
+        // Check for pickups
+        if (hasPositionChanged) {
+          for (let i = 0, l = world.pickups.length; i < l; i++) {
+            let pickup = world.pickups[i];
+            if (pickup.autoPickup && pickup.canPickup(message.position)) {
+              // This player should pickup the object!
+              pickup.enabled = false;
+              distributeMessage(-1, { id: message.id, type: MessageType.PICKUP, pickupId: pickup.id });
+            }
+          }
+        }
         break;
       default:
         message.id = id;
@@ -3534,17 +3681,79 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":26,"./world":31}],26:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":26,"./world":32}],26:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
   DISCONNECTED: "diconnected",
   GREET: "greet",
   ACKNOWLEDGE: "acknowledge",
-  POSITION: "position"
+  POSITION: "position",
+  PICKUP: "pickup"
 };
 
 },{}],27:[function(require,module,exports){
+// This might be more generic than pickup but I can't think of a better name
+// These are objects that exist in the world, and if a player root is in bounds
+// they either pick it up automatically or they can press a key to pick it up.
+// They also need to be droppable / spawnable
+
+let Maths = require('../../fury/src/maths');
+let Physics = require('../../fury/src/physics');
+let vec3 = Maths.vec3, quat = Maths.quat;
+
+let Pickup = module.exports = (function() {
+  let exports = {};
+  let prototype = {
+    canPickup: function(playerPosition) { // bounds check might be nice
+      return this.enabled && Physics.Sphere.contains(playerPosition, this.sphere);
+    }
+  };
+
+  exports.visualIds = {
+    REDCORE: "redcore",
+    BLUECORE: "bluecore",
+    YELLOWCORE: "yellowcore",
+    GREENCORE: "greencore"
+  };
+
+  exports.create = function(params) { // expects: id, position, visualId - optional: rotation, autoPickup, radius, enabled
+    let pickup = Object.create(prototype);
+
+    pickup.id = params.id;
+    pickup.visualId = params.visualId // Used by pickup visuals to know what to make this look like!
+    pickup.autoPickup = params.autoPickup;
+    pickup.position = params.position;
+
+    if (params.enabled) {
+      pickup.enabled = params.enabled;
+    } else {
+      pickup.enabled = true;
+    }
+
+    if (params.rotation) {
+      pickup.rotation = params.rotation;
+    } else {
+      pickup.rotation = quat.create();
+    }
+
+    let radius = 1;
+    if (params.radius) {
+      radius = params.radius;
+    }
+
+    pickup.sphere = Physics.Sphere.create({
+      center: pickup.position,  // Reference link position
+      radius: radius
+    });
+
+    return pickup;
+  };
+
+  return exports;
+})();
+
+},{"../../fury/src/maths":8,"../../fury/src/physics":11}],28:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {
@@ -3593,7 +3802,7 @@ var Chunk = module.exports = (function() {
   return exports;
 })();
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 // TODO: This should be actual config not a class ?
 var VorldConfig = module.exports = (function() {
   var exports = {};
@@ -3682,7 +3891,7 @@ var VorldConfig = module.exports = (function() {
   return exports;
 })();
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 let Chunk = require('./chunk');
 
 let Vorld = module.exports = (function() {
@@ -3835,7 +4044,7 @@ let Vorld = module.exports = (function() {
   return exports;
 })();
 
-},{"./chunk":27}],30:[function(require,module,exports){
+},{"./chunk":28}],31:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -3847,13 +4056,14 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
 let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
+let Pickup = require('./pickup');
 
 let World = module.exports = (function() {
   // Contains AABBs of the world environment
@@ -3887,6 +4097,7 @@ let World = module.exports = (function() {
     world.vorld = vorld;
     world.boxes = [];
     world.teleporters = [];
+    world.pickups = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -3930,6 +4141,16 @@ let World = module.exports = (function() {
       world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
+    let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
+      world.pickups.push(Pickup.create({
+        id: id,
+        visualId: visualId,
+        position: vec3.fromValues(x,y,z),
+        radius: radius,
+        autoPickup: !!autoPickup
+      }));
+    };
+
     let createTestSteps = function(level) {
       // test steps!
       level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
@@ -3937,12 +4158,12 @@ let World = module.exports = (function() {
     };
 
     world.createLevel = (levelName) => {
-      let level = [];
       switch(levelName) {
         case "test":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
           createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+          createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);
@@ -3952,8 +4173,9 @@ let World = module.exports = (function() {
           createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
           break;
       }
-      return level;
     };
+
+    // TODO: Create spawn mehtods with listeners
 
     return world;
   };
@@ -3961,4 +4183,4 @@ let World = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./vorld/config":28,"./vorld/vorld":29}]},{},[16]);
+},{"../../fury/src/fury.js":4,"./pickup":27,"./vorld/config":29,"./vorld/vorld":30}]},{},[16]);

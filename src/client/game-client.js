@@ -92,7 +92,13 @@ let GameClient = module.exports = (function(){
     }
 
     if (localPlayer) {
-      // Update Camera - TODO: Add offset rather than centered camera
+      // Check for request pickup and send pickup message
+      if (localPlayer.requestPickup) {
+        localPlayer.requestPickup = false;
+        sendMessage(localPlayer.pickupMessage);
+      }
+
+      // Update Camera
       vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
       if (localPlayer.snapCamera) {
         vec3.copy(camera.position, camera.targetPosition);
@@ -132,11 +138,21 @@ let GameClient = module.exports = (function(){
       case MessageType.DISCONNECTED:
         serverState.players[message.id] = null;
         despawnPlayer(message.id);
-        // TODO: Despawn player visuals and remove from player list
         break;
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         updatePlayer(message.id, message);
+        break;
+      case MessageType.PICKUP:
+        // Find pickup and assign it to player
+        for (let i = 0, l = world.pickups.length; i < l; i++) {
+          let pickup = world.pickups[i];
+          if (pickup.id == message.pickupId) {
+            pickup.enable = false;
+            pickup.visual.active = false;
+            // TODO: Attach to the player with message id - either display on their person or show in a 3D hud
+          }
+        }
         break;
     }
   };
@@ -149,7 +165,7 @@ let GameClient = module.exports = (function(){
     var level = world.createLevel(serverState.level);
 
     // Add world objects to render scene
-    WorldVisuals.generateVisuals(level, world.vorld, scene, () => {
+    WorldVisuals.generateVisuals(world, scene, () => {
       // World visuals instanitated - could defer player spawn until this point
     });
 
