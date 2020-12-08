@@ -33,7 +33,7 @@ let Player = module.exports = (function() {
 
   // Movement Settings
   let clampAngle = 10 * Math.PI / 180;
-  let movementSpeed = 2, lookSpeed = 1;
+  let movementSpeed = 4, lookSpeed = 1;
   let mouseLookSpeed = 0.1, jumpDeltaV = 5;
   // Q: Do we need to scale mouseLookSpeed by canvas size?
 

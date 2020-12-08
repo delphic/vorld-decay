@@ -1,6 +1,12 @@
 ## Theme
 Exploring sci-fi ruins / abandoned facilities.  
 
+Broad idea - robots looking for power cores in abandoned facilities to stay alive
+and power their escape.
+
+Want corpses to be persistent for other players to find, ideally with useful information
+on them about your adventures.
+
 ### Base Goals
 Support drop in / drop out cooperative play.
 Exploration w/ interesting traversal options.
@@ -15,7 +21,8 @@ Or perhaps there are 'puzzles' to solve, repairs to make, which hold for a given
 The ultimate goal might be to escape / progress to the next area, which requires multiple objects.
 
 If we use teleporters, c.f. Environment Generation, we can use the mechanic of them having
-power sources which are transferable, but clearly you can leave an area if there's no power source, so there's always an exit, players can't trap other players.
+power sources which are transferable, but clearly you can leave an area if there's no power source,
+so there's always an exit, players can't trap other players.
 
 If we want to give a time limit to players they could require power cores themselves.
 
