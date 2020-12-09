@@ -2,6 +2,10 @@ let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
+let Interactable = require('../common/interactable');
+
+let TeleporterControlVisuals = require('./interactables/teleporter-control-visuals');
+
 let vec3 = Fury.Maths.vec3;
 
 // Implicitly contains pickup / core visuals
@@ -91,9 +95,15 @@ let WorldVisuals = module.exports = (function() {
 
     let createCore = function(material, pickup) {
       // TODO: Add a rotator and a bob component
-      return scene.add({ mesh: coreMesh, material: material, position: pickup.position, rotation: pickup.rotation });
+      return scene.add({
+        mesh: coreMesh,
+        material: material,
+        position: pickup.position,
+        rotation: pickup.rotation
+      });
     };
 
+    // Create Pickup Visuals
     let pickups = world.pickups;
     for (let i = 0, l = pickups.length; i < l; i++) {
       let pickup = pickups[i];
@@ -111,8 +121,20 @@ let WorldVisuals = module.exports = (function() {
           pickup.visual = createCore(greenMaterial, pickup);
           break;
       }
-    }
 
+      // Create Interactable Visuals
+      let interactables = world.interactables;
+      for (let i = 0, l = interactables.length; i < l; i++) {
+        let interactable = interactables[i];
+        switch(interactable.type) {
+          case Interactable.Type.TELEPORTER_CONTROL:
+            interactable.visual = TeleporterControlVisuals.create({
+              interactable: interactable
+            });
+            break;
+        }
+      }
+    }
 
     let vorld = world.vorld;
     if (!vorld) {

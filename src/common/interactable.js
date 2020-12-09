@@ -57,7 +57,6 @@ let Interactable = module.exports = (function() {
 
     // TODO: Replace these messages with observer pattern
     let message = function(message) {
-      console.log(message);
       if (interactable.visual && interactable.visual.onmessage) {
         interactable.visual.onmessage(message);
       }
@@ -145,9 +144,6 @@ let Interactable = module.exports = (function() {
         createTeleporterControl(interactable, params);
         break;
     }
-
-    // TODO: Some concept of state (on/off)
-    // TODO: link to other items, e.g. teleporters
 
     return interactable;
   };

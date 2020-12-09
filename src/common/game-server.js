@@ -100,13 +100,10 @@ let GameServer = module.exports = (function() {
         // Call interact then update global state
         // and distribute
         let position = globalState.players[id].position;
-        console.log("Interact Received");
         // Look for interactable at player position
         for (let i = 0, l = world.interactables.length; i < l; i++) {
           let interactable = world.interactables[i];
-          console.log("Interactable Id " + interactable.id);
           if (interactable.canInteract(position)) {
-            console.log("Interacted!");
             // Interact!
             let heldPickupState = getHeldPickup(id);
             let heldPickup = null;
@@ -138,7 +135,6 @@ let GameServer = module.exports = (function() {
             distributeMessage(-1, message);
             break;
           }
-          console.log("Did not interact");
         }
         break;
       case MessageType.POSITION:  // This is more a player transform / input sync

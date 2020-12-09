@@ -2174,7 +2174,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":18,"./client/game-client":19,"./common/game-server":25,"./common/websocket-close-codes":32}],17:[function(require,module,exports){
+},{"./client/connection":18,"./client/game-client":19,"./common/game-server":26,"./common/websocket-close-codes":33}],17:[function(require,module,exports){
 // Character Controller handles physics and movement for characters (players)
 let Fury = require('../../fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
@@ -2508,7 +2508,7 @@ var CharacterController = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":31}],18:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":32}],18:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2924,7 +2924,55 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":27,"../common/world":33,"./player":21,"./player-visuals":20,"./world-visuals":24}],20:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":28,"../common/world":34,"./player":22,"./player-visuals":21,"./world-visuals":25}],20:[function(require,module,exports){
+
+let TeleporterControlVisuals = module.exports = (function() {
+  let exports = {};
+  let prototype =  {};
+
+  exports.create = (params) => {
+    // expected: interactable (of type teleporter control)
+    let visuals = Object.create(prototype);
+
+    visuals.interactable = params.interactable;
+
+    visuals.onmessage = (message) => {
+        switch(message) {
+          case "init":  // Valid for all interactable visuals
+            // State was non-standard on connect, update for teleporter state
+            console.log("Init called on control visuals");
+            // TODO: notify interactable.teleporter as to powered state
+            break;
+          case "powered":
+            // Was not powered has become powered
+            console.log("Control is now powered");
+            break;
+          case "took_core":
+            // Took core but still needs more
+            console.log("Thank you for your donation");
+            break;
+          case "invalid_core":
+            // Tried to give the control a core it didn't need
+            console.log("I don't want that one");
+            break;
+          case "unpowered":
+            // Tried to interact with control with no core
+            console.log("I need more power cores");
+            break;
+          case "already_powered":
+            // Tried to interacted with control when already powered
+            console.log("I'm all good thanks!");
+            break;
+        }
+    }
+
+    return visuals;
+  };
+
+  return exports;
+})();
+
+},{}],21:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
@@ -2956,7 +3004,7 @@ let PlayerVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./player":21,"./primitives":22,"./shaders":23}],21:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"./player":22,"./primitives":23,"./shaders":24}],22:[function(require,module,exports){
 // Client side player
 // Handles both local player and replicas
 // Handles input and movement
@@ -3240,7 +3288,7 @@ let Player = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":27,"./character-controller":17}],22:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":28,"./character-controller":17}],23:[function(require,module,exports){
 // Helper for creating mesh primitives
 let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
@@ -3347,7 +3395,7 @@ var Primitives = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],23:[function(require,module,exports){
+},{"../../fury/src/fury.js":4}],24:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 
 var Shaders = module.exports = (function() {
@@ -3535,11 +3583,15 @@ var Shaders = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],24:[function(require,module,exports){
+},{"../../fury/src/fury.js":4}],25:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
+let Interactable = require('../common/interactable');
+
+let TeleporterControlVisuals = require('./interactables/teleporter-control-visuals');
+
 let vec3 = Fury.Maths.vec3;
 
 // Implicitly contains pickup / core visuals
@@ -3629,9 +3681,15 @@ let WorldVisuals = module.exports = (function() {
 
     let createCore = function(material, pickup) {
       // TODO: Add a rotator and a bob component
-      return scene.add({ mesh: coreMesh, material: material, position: pickup.position, rotation: pickup.rotation });
+      return scene.add({
+        mesh: coreMesh,
+        material: material,
+        position: pickup.position,
+        rotation: pickup.rotation
+      });
     };
 
+    // Create Pickup Visuals
     let pickups = world.pickups;
     for (let i = 0, l = pickups.length; i < l; i++) {
       let pickup = pickups[i];
@@ -3649,8 +3707,20 @@ let WorldVisuals = module.exports = (function() {
           pickup.visual = createCore(greenMaterial, pickup);
           break;
       }
-    }
 
+      // Create Interactable Visuals
+      let interactables = world.interactables;
+      for (let i = 0, l = interactables.length; i < l; i++) {
+        let interactable = interactables[i];
+        switch(interactable.type) {
+          case Interactable.Type.TELEPORTER_CONTROL:
+            interactable.visual = TeleporterControlVisuals.create({
+              interactable: interactable
+            });
+            break;
+        }
+      }
+    }
 
     let vorld = world.vorld;
     if (!vorld) {
@@ -3693,7 +3763,7 @@ let WorldVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/pickup":28,"./primitives":22,"./shaders":23}],25:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/interactable":27,"../common/pickup":29,"./interactables/teleporter-control-visuals":20,"./primitives":23,"./shaders":24}],26:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -3796,13 +3866,10 @@ let GameServer = module.exports = (function() {
         // Call interact then update global state
         // and distribute
         let position = globalState.players[id].position;
-        console.log("Interact Received");
         // Look for interactable at player position
         for (let i = 0, l = world.interactables.length; i < l; i++) {
           let interactable = world.interactables[i];
-          console.log("Interactable Id " + interactable.id);
           if (interactable.canInteract(position)) {
-            console.log("Interacted!");
             // Interact!
             let heldPickupState = getHeldPickup(id);
             let heldPickup = null;
@@ -3834,7 +3901,6 @@ let GameServer = module.exports = (function() {
             distributeMessage(-1, message);
             break;
           }
-          console.log("Did not interact");
         }
         break;
       case MessageType.POSITION:  // This is more a player transform / input sync
@@ -3976,7 +4042,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":27,"./world":33}],26:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":28,"./world":34}],27:[function(require,module,exports){
 // A static world object which can be interacted with in some way
 // This might be better described as a static trigger (with pickup being a dynamic trigger)
 let Maths = require('../../fury/src/maths');
@@ -4036,7 +4102,6 @@ let Interactable = module.exports = (function() {
 
     // TODO: Replace these messages with observer pattern
     let message = function(message) {
-      console.log(message);
       if (interactable.visual && interactable.visual.onmessage) {
         interactable.visual.onmessage(message);
       }
@@ -4125,16 +4190,13 @@ let Interactable = module.exports = (function() {
         break;
     }
 
-    // TODO: Some concept of state (on/off)
-    // TODO: link to other items, e.g. teleporters
-
     return interactable;
   };
 
   return exports;
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8}],27:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8}],28:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -4147,7 +4209,7 @@ var MessageType = module.exports = {
   INTERACT: "interact"
 };
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 // This might be more generic than pickup but I can't think of a better name
 // These are objects that exist in the world, and if a player root is in bounds
 // they either pick it up automatically or they can press a key to pick it up.
@@ -4225,7 +4287,7 @@ let Pickup = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/maths":8,"../../fury/src/physics":11}],29:[function(require,module,exports){
+},{"../../fury/src/maths":8,"../../fury/src/physics":11}],30:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {
@@ -4274,7 +4336,7 @@ var Chunk = module.exports = (function() {
   return exports;
 })();
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 // TODO: This should be actual config not a class ?
 var VorldConfig = module.exports = (function() {
   var exports = {};
@@ -4363,7 +4425,7 @@ var VorldConfig = module.exports = (function() {
   return exports;
 })();
 
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 let Chunk = require('./chunk');
 
 let Vorld = module.exports = (function() {
@@ -4516,7 +4578,7 @@ let Vorld = module.exports = (function() {
   return exports;
 })();
 
-},{"./chunk":29}],32:[function(require,module,exports){
+},{"./chunk":30}],33:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -4528,7 +4590,7 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
@@ -4709,4 +4771,4 @@ let World = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./interactable":26,"./pickup":28,"./vorld/config":30,"./vorld/vorld":31}]},{},[16]);
+},{"../../fury/src/fury.js":4,"./interactable":27,"./pickup":29,"./vorld/config":31,"./vorld/vorld":32}]},{},[16]);
