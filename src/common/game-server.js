@@ -84,6 +84,7 @@ let GameServer = module.exports = (function() {
               pickup.enabled = false;
               setPickupGlobalState(pickup.id, id);
               distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+              break;  // Only pickup one object at a time!
             }
           }
         }
@@ -91,7 +92,7 @@ let GameServer = module.exports = (function() {
       case MessageType.DROP:
         // If we wanted to be super accurate we could expect position
         if (isHoldingPickup(id)) {
-          dropPickups(id); // Currently just drops all pickups
+          dropPickups(id, message.position); // Currently just drops all pickups
           message.id = id;
           distributeMessage(-1, message);
         }
@@ -158,6 +159,10 @@ let GameServer = module.exports = (function() {
               Maths.vec3.copy(message.position, teleporter.targetPosition);
               Maths.quat.copy(message.rotation, teleporter.targetRotation);
               message.snapLook = true;
+              if (teleporter.win) {
+                message.win = true;
+              }
+              break;
             }
           }
         }
@@ -242,13 +247,13 @@ let GameServer = module.exports = (function() {
     return null;
   };
 
-  let dropPickups = (id) => {
+  let dropPickups = (id, dropPosition) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].owner == id) {
-        // calculate drop position (just player position for now)
-        let dropPosition = globalState.players[id].position;
-         // TODO: drop to current held position, use method on world to calculate?
-
+        if (!dropPosition) {
+          // TODO: Calculate from player position and rotation and drop slightly in front
+          dropPosition = globalState.players[id].position;
+        }
         // re-enable world pickup
         let pickup = world.getPickup(globalState.pickups[i].id);
         if (pickup) {

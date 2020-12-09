@@ -164,25 +164,69 @@ let World = module.exports = (function() {
       switch(levelName) {
         case "debug":
           // Placeholder level creation
+          // Note ids aren't important so long as they're unique
+          let room1TargetPosition = vec3.fromValues(0.5,3,0.5);
+          let room1TargetRotation = Maths.quatEuler(0, 0, 0);
+          let room2TargetPosition = vec3.fromValues(-99.5,1,0.5);
+          let room2TargetRotation = Maths.quatEuler(0, 180, 0);
+          let room3TargetPosition = vec3.fromValues(101,1,0.5);
+          let room3TargetRotation = Maths.quatEuler(0, 180+45, 0);
+
           createRoom(-5,0,-10, 11,5,11);
           // Note target position should add player y extents as player position
           // isn't at the bottom of it's box cause we're insane
-          let targetPosition = vec3.fromValues(-99.5,1,0.5);
+          let targetPosition
           createTeleporterControl(
             "teleporter_control_1",
-            -2, 0, -9,
-            createTeleporter(0, 0,-9, targetPosition, Maths.quatEuler(0, 180, 0)),
+            -2, 0, -10,
+            createTeleporter(-4, 0,-9, room2TargetPosition, room2TargetRotation),
             [1] // requires one red core
           );
-          createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
+          createPickup("red_core_1", Pickup.visualIds.REDCORE, 0.5, 0.5, -9, 1.5, false);
 
+          // TODO: Win on teleport through this one!
+          let winTeleporter = createTeleporter(4, 0, -9, vec3.fromValues(0,-100, 100), room1TargetRotation);
+          winTeleporter.win = true;
+          createTeleporterControl(
+            "teleporter_control_exit",
+            2, 0, -10,
+            winTeleporter,
+            [0, 1]  // requires one blue core
+          );
+
+          // Ability to set multiple bounds positions, NESW
+
+          /* TODO: Add debug visuals on corner of teleporters (for off and on) */
+          /* Add debug visuals on corners of control panels (to denote required cores) */
+
+          /* Advanced Mechanics TODO:
+            Have second teleporter in room 1 require multiple cores (blue and red)
+            Add another red core to room 3
+            Need to be able to remove cores from controls if you put it in and place it in the other
+            Need to be able to drop cores into teleporter without using it (another interactable which teleports cores it's given)
+          */
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);
-          createTeleporter(-100, 0, d-3, vec3.fromValues(101,1,0.5), Maths.quatEuler(0, 180+45, 0));
+          createTeleporter(-100, 0, d-3, room3TargetPosition, room3TargetRotation);
+          createPickup("blue_core_1", Pickup.visualIds.BLUECORE, -99.5, 0.5, 10, 1.5, false);
 
           createRoom(100, -4, -1, 30, 8, 20);
-          createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
+          createPickup("yellow_core_1", Pickup.visualIds.YELLOWCORE, 105, -3, 4, 1.5, false);
+          createPickup("green_core_1", Pickup.visualIds.GREENCORE, 115, -3, 10, 1.5, false);
+          let room3Teleporter =  createTeleporter(128, -4, 0, room1TargetPosition, room1TargetRotation);
+          createTeleporterControl(
+            "teleporter_control_3_yellow",
+            128, -4, 2,
+            room3Teleporter,
+            [0,0,1] // requires one yellow core
+          );
+          createTeleporterControl(
+            "teleporter_control_3_green",
+            129, -4, 2,
+            room3Teleporter,
+            [0,0,0,1] // requires one green core
+          );
           break;
       }
     };

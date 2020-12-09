@@ -2342,6 +2342,8 @@ var CharacterController = module.exports = (function() {
           foundZ = false;
         } else if (canMoveXOnly && canMoveZOnly) {
           // Tie Break!
+          let timeX = voxelCollisionResult.timeX;
+          let timeZ = voxelCollisionResult.timeZ;
           if (timeX < timeZ) {
             delta[0] = 0;
             delta[2] = dz;
@@ -2749,12 +2751,21 @@ let GameClient = module.exports = (function(){
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         updatePlayer(message.id, message);
+        if (message.win && message.id == localPlayer.id) {
+          // You Win!
+          let win = () => {
+            Fury.Input.releasePointerLock();
+            window.alert("You Win!");
+            window.location = window.location;  // Restart game
+          };
+          window.setTimeout(win, 1000);
+        }
         break;
       case MessageType.PICKUP:
         assignPickup(message.pickupId, message.id);
         break;
       case MessageType.DROP:
-        dropPickups(message.id);
+        dropPickups(message.id, message.position);
         break;
       case MessageType.INTERACT:
         let interactable = world.getInteractable(message.interactableId);
@@ -2853,13 +2864,16 @@ let GameClient = module.exports = (function(){
     }
   };
 
-  let dropPickups = (playerId) => {
+  let dropPickups = (playerId, position) => {
     let player = getPlayer(playerId);
     if (player && player.heldItem) {
       player.heldItem.enabled = true;
-      vec3.copy(player.heldItem.position, player.position);
+      if (position) {
+        vec3.copy(player.heldItem.position, position);
+      } else {
+        vec3.copy(player.heldItem.position, player.position);
+      }
       player.heldItem = null;
-      // TODO: Cast to floor, use world method
     }
   };
 
@@ -3105,7 +3119,8 @@ let Player = module.exports = (function() {
         type: MessageType.INTERACT
       };
       player.dropMessage = {
-        type: MessageType.DROP
+        type: MessageType.DROP,
+        position: [0,0,0]
       };
       player.requestPickup = false;
       player.requestDrop = false;
@@ -3215,7 +3230,11 @@ let Player = module.exports = (function() {
       if (player.heldItem) {
         // TODO: Define offset point?
         vec3.scaleAndAdd(player.heldItem.position, player.position, player.localZ, -0.5);
+        // TODO: Server should do this
+        vec3.copy(player.dropMessage.position, player.heldItem.position);
+        vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 0.35);
         quat.copy(player.heldItem.rotation, player.rotation);
+
         //vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 1);
       }
 
@@ -3886,6 +3905,7 @@ let GameServer = module.exports = (function() {
               pickup.enabled = false;
               setPickupGlobalState(pickup.id, id);
               distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+              break;  // Only pickup one object at a time!
             }
           }
         }
@@ -3893,7 +3913,7 @@ let GameServer = module.exports = (function() {
       case MessageType.DROP:
         // If we wanted to be super accurate we could expect position
         if (isHoldingPickup(id)) {
-          dropPickups(id); // Currently just drops all pickups
+          dropPickups(id, message.position); // Currently just drops all pickups
           message.id = id;
           distributeMessage(-1, message);
         }
@@ -3960,6 +3980,10 @@ let GameServer = module.exports = (function() {
               Maths.vec3.copy(message.position, teleporter.targetPosition);
               Maths.quat.copy(message.rotation, teleporter.targetRotation);
               message.snapLook = true;
+              if (teleporter.win) {
+                message.win = true;
+              }
+              break;
             }
           }
         }
@@ -4044,13 +4068,13 @@ let GameServer = module.exports = (function() {
     return null;
   };
 
-  let dropPickups = (id) => {
+  let dropPickups = (id, dropPosition) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].owner == id) {
-        // calculate drop position (just player position for now)
-        let dropPosition = globalState.players[id].position;
-         // TODO: drop to current held position, use method on world to calculate?
-
+        if (!dropPosition) {
+          // TODO: Calculate from player position and rotation and drop slightly in front
+          dropPosition = globalState.players[id].position;
+        }
         // re-enable world pickup
         let pickup = world.getPickup(globalState.pickups[i].id);
         if (pickup) {
@@ -4796,25 +4820,69 @@ let World = module.exports = (function() {
       switch(levelName) {
         case "debug":
           // Placeholder level creation
+          // Note ids aren't important so long as they're unique
+          let room1TargetPosition = vec3.fromValues(0.5,3,0.5);
+          let room1TargetRotation = Maths.quatEuler(0, 0, 0);
+          let room2TargetPosition = vec3.fromValues(-99.5,1,0.5);
+          let room2TargetRotation = Maths.quatEuler(0, 180, 0);
+          let room3TargetPosition = vec3.fromValues(101,1,0.5);
+          let room3TargetRotation = Maths.quatEuler(0, 180+45, 0);
+
           createRoom(-5,0,-10, 11,5,11);
           // Note target position should add player y extents as player position
           // isn't at the bottom of it's box cause we're insane
-          let targetPosition = vec3.fromValues(-99.5,1,0.5);
+          let targetPosition
           createTeleporterControl(
             "teleporter_control_1",
-            -2, 0, -9,
-            createTeleporter(0, 0,-9, targetPosition, Maths.quatEuler(0, 180, 0)),
+            -2, 0, -10,
+            createTeleporter(-4, 0,-9, room2TargetPosition, room2TargetRotation),
             [1] // requires one red core
           );
-          createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
+          createPickup("red_core_1", Pickup.visualIds.REDCORE, 0.5, 0.5, -9, 1.5, false);
 
+          // TODO: Win on teleport through this one!
+          let winTeleporter = createTeleporter(4, 0, -9, vec3.fromValues(0,-100, 100), room1TargetRotation);
+          winTeleporter.win = true;
+          createTeleporterControl(
+            "teleporter_control_exit",
+            2, 0, -10,
+            winTeleporter,
+            [0, 1]  // requires one blue core
+          );
+
+          // Ability to set multiple bounds positions, NESW
+
+          /* TODO: Add debug visuals on corner of teleporters (for off and on) */
+          /* Add debug visuals on corners of control panels (to denote required cores) */
+
+          /* Advanced Mechanics TODO:
+            Have second teleporter in room 1 require multiple cores (blue and red)
+            Add another red core to room 3
+            Need to be able to remove cores from controls if you put it in and place it in the other
+            Need to be able to drop cores into teleporter without using it (another interactable which teleports cores it's given)
+          */
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);
-          createTeleporter(-100, 0, d-3, vec3.fromValues(101,1,0.5), Maths.quatEuler(0, 180+45, 0));
+          createTeleporter(-100, 0, d-3, room3TargetPosition, room3TargetRotation);
+          createPickup("blue_core_1", Pickup.visualIds.BLUECORE, -99.5, 0.5, 10, 1.5, false);
 
           createRoom(100, -4, -1, 30, 8, 20);
-          createTeleporter(128, -4, 0, vec3.fromValues(0.5,3,0.5), Maths.quatEuler(0, 0, 0));
+          createPickup("yellow_core_1", Pickup.visualIds.YELLOWCORE, 105, -3, 4, 1.5, false);
+          createPickup("green_core_1", Pickup.visualIds.GREENCORE, 115, -3, 10, 1.5, false);
+          let room3Teleporter =  createTeleporter(128, -4, 0, room1TargetPosition, room1TargetRotation);
+          createTeleporterControl(
+            "teleporter_control_3_yellow",
+            128, -4, 2,
+            room3Teleporter,
+            [0,0,1] // requires one yellow core
+          );
+          createTeleporterControl(
+            "teleporter_control_3_green",
+            129, -4, 2,
+            room3Teleporter,
+            [0,0,0,1] // requires one green core
+          );
           break;
       }
     };

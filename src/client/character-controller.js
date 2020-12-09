@@ -165,6 +165,8 @@ var CharacterController = module.exports = (function() {
           foundZ = false;
         } else if (canMoveXOnly && canMoveZOnly) {
           // Tie Break!
+          let timeX = voxelCollisionResult.timeX;
+          let timeZ = voxelCollisionResult.timeZ;
           if (timeX < timeZ) {
             delta[0] = 0;
             delta[2] = dz;

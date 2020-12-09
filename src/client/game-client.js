@@ -155,12 +155,21 @@ let GameClient = module.exports = (function(){
       case MessageType.POSITION:
         serverState.players[message.id].position = message.position;
         updatePlayer(message.id, message);
+        if (message.win && message.id == localPlayer.id) {
+          // You Win!
+          let win = () => {
+            Fury.Input.releasePointerLock();
+            window.alert("You Win!");
+            window.location = window.location;  // Restart game
+          };
+          window.setTimeout(win, 1000);
+        }
         break;
       case MessageType.PICKUP:
         assignPickup(message.pickupId, message.id);
         break;
       case MessageType.DROP:
-        dropPickups(message.id);
+        dropPickups(message.id, message.position);
         break;
       case MessageType.INTERACT:
         let interactable = world.getInteractable(message.interactableId);
@@ -259,13 +268,16 @@ let GameClient = module.exports = (function(){
     }
   };
 
-  let dropPickups = (playerId) => {
+  let dropPickups = (playerId, position) => {
     let player = getPlayer(playerId);
     if (player && player.heldItem) {
       player.heldItem.enabled = true;
-      vec3.copy(player.heldItem.position, player.position);
+      if (position) {
+        vec3.copy(player.heldItem.position, position);
+      } else {
+        vec3.copy(player.heldItem.position, player.position);
+      }
       player.heldItem = null;
-      // TODO: Cast to floor, use world method
     }
   };
 

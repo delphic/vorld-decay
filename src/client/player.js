@@ -146,7 +146,8 @@ let Player = module.exports = (function() {
         type: MessageType.INTERACT
       };
       player.dropMessage = {
-        type: MessageType.DROP
+        type: MessageType.DROP,
+        position: [0,0,0]
       };
       player.requestPickup = false;
       player.requestDrop = false;
@@ -256,7 +257,11 @@ let Player = module.exports = (function() {
       if (player.heldItem) {
         // TODO: Define offset point?
         vec3.scaleAndAdd(player.heldItem.position, player.position, player.localZ, -0.5);
+        // TODO: Server should do this
+        vec3.copy(player.dropMessage.position, player.heldItem.position);
+        vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 0.35);
         quat.copy(player.heldItem.rotation, player.rotation);
+
         //vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 1);
       }
 
