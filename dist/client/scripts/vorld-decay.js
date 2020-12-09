@@ -2680,7 +2680,13 @@ let GameClient = module.exports = (function(){
       // Check for request pickup and send pickup message
       if (localPlayer.requestPickup) {
         localPlayer.requestPickup = false;
+         // TODO: Arguably should set something to prevent rerequests until have response
         sendMessage(localPlayer.pickupMessage);
+      }
+      if (localPlayer.requestDrop) {
+        localPlayer.requestDrop = false;
+        // TODO: Arguably should set something to prevent rerequests until have reponse
+        sendMessage(localPlayer.dropMessage);
       }
 
       // Update Camera
@@ -2731,6 +2737,9 @@ let GameClient = module.exports = (function(){
         break;
       case MessageType.PICKUP:
         assignPickup(message.pickupId, message.id);
+        break;
+      case MessageType.DROP:
+        dropPickups(message.id);
         break;
     }
   };
@@ -2799,6 +2808,7 @@ let GameClient = module.exports = (function(){
     if (player && player.heldItem) {
       player.heldItem.enabled = true;
       vec3.copy(player.heldItem.position, player.position);
+      player.heldItem = null;
       // TODO: Cast to floor, use world method
     }
   };
@@ -2809,7 +2819,7 @@ let GameClient = module.exports = (function(){
       localPlayer = Player.create({
         id: id,
         position: vec3.clone(player.position),
-        rotation: quat.create(),
+        rotation: quat.clone(player.rotation),
         world: world });
       players.push(localPlayer);
     } else {
@@ -2817,7 +2827,7 @@ let GameClient = module.exports = (function(){
         id: id,
         isReplica: true,
         position: vec3.clone(player.position),
-        rotation: quat.create(),
+        rotation: quat.clone(player.rotation),
         world: world });
       replica.visuals = PlayerVisuals.create(replica, scene);
       players.push(replica);
@@ -2940,7 +2950,7 @@ let Player = module.exports = (function() {
     var player = Object.create(prototype);
 
     let movementDelta = vec3.create();
-    let targetRotation = quat.create();
+    let targetRotation = quat.clone(params.rotation);
 
     let detectInput = function() {
       // Clear existing input
@@ -2986,6 +2996,9 @@ let Player = module.exports = (function() {
       if (Fury.Input.keyDown("e", true)) {
         player.requestPickup = true;
       }
+      if (Fury.Input.keyDown("g", true)) {
+        player.requestDrop = true;
+      }
 
       player.jumpInput = Fury.Input.keyDown("Space", true);
 
@@ -3007,11 +3020,6 @@ let Player = module.exports = (function() {
       yVelocity: 0
     };
 
-    player.pickupMessage = {
-      type: MessageType.PICKUP,
-      position: [0,0,0]
-    };
-    player.requestPickup = false;
 
     player.id = params.id;
     player.snapCamera = true;
@@ -3037,6 +3045,20 @@ let Player = module.exports = (function() {
     player.jumpInput = false;
     player.inputDirty = false;  // set to true if position changes (not rotation)
     player.stateDirty = false;  // set to true if position, rotation changes
+
+    // Pickup and drop
+    if (!player.isReplica) {
+      player.pickupMessage = {
+        type: MessageType.PICKUP,
+        position: [0,0,0]
+      };
+
+      player.dropMessage = {
+        type: MessageType.DROP
+      };
+      player.requestPickup = false;
+      player.requestDrop = false;
+    }
 
     // The fact movement is dependent on rotation and we're not networking it
     // as often means we're going to get plenty of misprediction with extrapolation
@@ -3656,31 +3678,67 @@ let GameServer = module.exports = (function() {
     sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: globalState });
   };
 
+  let positionCache = [0,0,0];
+
+  // Helpers for copying into DTOs
+  // TODO: Move to common so we can reuse for client side DTOs
+  let cloneArray3 = (array) => {
+    return [ array[0].toFixed(2), array[1].toFixed(2), array[2].toFixed(2) ];
+  };
+  let copyArray3 = (out, array) => {
+    out[0] = array[0].toFixed(2);
+    out[1] = array[1].toFixed(2);
+    out[2] = array[2].toFixed(2);
+  };
+  let cloneArray4 = (array) => {
+    return [ array[0].toFixed(2), array[1].toFixed(2), array[2].toFixed(2), array[3].toFixed(2) ];
+  };
+  let copyArray4 = (out, array) => {
+    out[0] = array[0].toFixed(2);
+    out[1] = array[1].toFixed(2);
+    out[2] = array[2].toFixed(2);
+    out[3] = array[3].toFixed(2);
+  };
+
   exports.onmessage = (id, message) => {
     switch(message.type) {
       case MessageType.GREET:
         let nick = message.nick;
         if (!nick) nick = "Player " + (id + 1);
-        globalState.players[id] = { id: id, nick: nick, position: world.initialSpawnPosition };
+        globalState.players[id] = { id: id, nick: nick, position: cloneArray3(world.initialSpawnPosition), rotation: [0,0,0,1] };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
       case MessageType.PICKUP:
         // Expect position, run through pickups and try to pickup
-        for (let i = 0, l = world.pickups.length; i < l; i++) {
-          let pickup = world.pickups[i];
-          if (pickup.canPickup(message.position)) {
-            // This player should pickup the object!
-            pickup.enabled = false;
-            setPickupGlobalState(pickup.id, id);
-            distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+        // Could in theory use last known position it's probably fine
+        if (!isHoldingPickup(id)) {
+          for (let i = 0, l = world.pickups.length; i < l; i++) {
+            let pickup = world.pickups[i];
+            if (pickup.canPickup(message.position)) {
+              // This player should pickup the object!
+              pickup.enabled = false;
+              setPickupGlobalState(pickup.id, id);
+              distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+            }
           }
+        }
+        break;
+      case MessageType.DROP:
+        // If we wanted to be super accurate we could expect position
+        if (isHoldingPickup(id)) {
+          dropPickups(id); // Currently just drops all pickups
+          message.id = id;
+          distributeMessage(-1, message);
         }
         break;
       case MessageType.POSITION:  // This is more a player transform / input sync
         message.id = id;
 
-        let hasPositionChanged = Maths.vec3.equals(message.position, globalState.players[id].position);
-        globalState.players[id].position = message.position;
+        copyArray3(positionCache, message.position);
+        let hasPositionChanged = !Maths.vec3.equals(positionCache, globalState.players[id].position);
+        if (hasPositionChanged)
+        copyArray3(globalState.players[id].position, message.position);
+        copyArray4(globalState.players[id].rotation, message.rotation);
 
         // Check for teleporter collision
         let shouldTeleport = false;
@@ -3708,7 +3766,7 @@ let GameServer = module.exports = (function() {
         }
 
         // Check for pickups
-        if (hasPositionChanged) {
+        if (hasPositionChanged && !isHoldingPickup(id)) {
           for (let i = 0, l = world.pickups.length; i < l; i++) {
             let pickup = world.pickups[i];
             if (pickup.autoPickup && pickup.canPickup(message.position)) {
@@ -3738,33 +3796,43 @@ let GameServer = module.exports = (function() {
     globalState.pickups.push({ id: id, owner: owner, position: null })
   };
 
+  let isHoldingPickup = (id) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].owner == id) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  let dropPickups = (id) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].owner == id) {
+        // calculate drop position (just player position for now)
+        let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
+
+        // re-enable world pickup
+        for (let j = 0, n = world.pickups.length; j < n; j++) {
+          let pickup = world.pickups[j];
+          if (pickup.id == globalState.pickups[i].id) {
+            pickup.enabled = true;
+            Maths.vec3.copy(pickup.position, dropPosition);
+            break;
+          }
+        }
+
+        // update global state pickup
+        globalState.pickups[i].owner = null;
+        globalState.pickups[i].position = dropPosition;
+      }
+    }
+  };
+
   exports.onclientdisconnect = (id) => {
     // Only report disconnection of players which have sent greet
     if (globalState.players[id]) {
-      // Check for owned pickups
-      for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-        if (globalState.pickups[i].owner == id) {
-          // calculate drop position (just player position for now)
-          let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
-
-          // re-enable world pickup
-          for (let j = 0, n = world.pickups.length; j < n; j++) {
-            let pickup = world.pickups[j];
-            if (pickup.id == globalState.pickups[i].id) {
-              pickup.enabled = true;
-              Maths.vec3.copy(pickup.position, dropPosition);
-              break;
-            }
-          }
-
-          // update global state pickup
-          globalState.pickups[i].owner = null;
-          globalState.pickups[i].position = dropPosition;
-        }
-      }
-
-      // Remove from state
-      globalState.players[id] = null;
+      dropPickups(id);  // Drop any owned pickups
+      globalState.players[id] = null; // Remove from state
       distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
     }
   };
@@ -3781,7 +3849,8 @@ var MessageType = module.exports = {
   GREET: "greet",
   ACKNOWLEDGE: "acknowledge",
   POSITION: "position",
-  PICKUP: "pickup"
+  PICKUP: "pickup",
+  DROP: "drop"
 };
 
 },{}],27:[function(require,module,exports){

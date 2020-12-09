@@ -95,7 +95,13 @@ let GameClient = module.exports = (function(){
       // Check for request pickup and send pickup message
       if (localPlayer.requestPickup) {
         localPlayer.requestPickup = false;
+         // TODO: Arguably should set something to prevent rerequests until have response
         sendMessage(localPlayer.pickupMessage);
+      }
+      if (localPlayer.requestDrop) {
+        localPlayer.requestDrop = false;
+        // TODO: Arguably should set something to prevent rerequests until have reponse
+        sendMessage(localPlayer.dropMessage);
       }
 
       // Update Camera
@@ -146,6 +152,9 @@ let GameClient = module.exports = (function(){
         break;
       case MessageType.PICKUP:
         assignPickup(message.pickupId, message.id);
+        break;
+      case MessageType.DROP:
+        dropPickups(message.id);
         break;
     }
   };
@@ -214,6 +223,7 @@ let GameClient = module.exports = (function(){
     if (player && player.heldItem) {
       player.heldItem.enabled = true;
       vec3.copy(player.heldItem.position, player.position);
+      player.heldItem = null;
       // TODO: Cast to floor, use world method
     }
   };
@@ -224,7 +234,7 @@ let GameClient = module.exports = (function(){
       localPlayer = Player.create({
         id: id,
         position: vec3.clone(player.position),
-        rotation: quat.create(),
+        rotation: quat.clone(player.rotation),
         world: world });
       players.push(localPlayer);
     } else {
@@ -232,7 +242,7 @@ let GameClient = module.exports = (function(){
         id: id,
         isReplica: true,
         position: vec3.clone(player.position),
-        rotation: quat.create(),
+        rotation: quat.clone(player.rotation),
         world: world });
       replica.visuals = PlayerVisuals.create(replica, scene);
       players.push(replica);

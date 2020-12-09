@@ -41,7 +41,7 @@ let Player = module.exports = (function() {
     var player = Object.create(prototype);
 
     let movementDelta = vec3.create();
-    let targetRotation = quat.create();
+    let targetRotation = quat.clone(params.rotation);
 
     let detectInput = function() {
       // Clear existing input
@@ -87,6 +87,9 @@ let Player = module.exports = (function() {
       if (Fury.Input.keyDown("e", true)) {
         player.requestPickup = true;
       }
+      if (Fury.Input.keyDown("g", true)) {
+        player.requestDrop = true;
+      }
 
       player.jumpInput = Fury.Input.keyDown("Space", true);
 
@@ -108,11 +111,6 @@ let Player = module.exports = (function() {
       yVelocity: 0
     };
 
-    player.pickupMessage = {
-      type: MessageType.PICKUP,
-      position: [0,0,0]
-    };
-    player.requestPickup = false;
 
     player.id = params.id;
     player.snapCamera = true;
@@ -138,6 +136,20 @@ let Player = module.exports = (function() {
     player.jumpInput = false;
     player.inputDirty = false;  // set to true if position changes (not rotation)
     player.stateDirty = false;  // set to true if position, rotation changes
+
+    // Pickup and drop
+    if (!player.isReplica) {
+      player.pickupMessage = {
+        type: MessageType.PICKUP,
+        position: [0,0,0]
+      };
+
+      player.dropMessage = {
+        type: MessageType.DROP
+      };
+      player.requestPickup = false;
+      player.requestDrop = false;
+    }
 
     // The fact movement is dependent on rotation and we're not networking it
     // as often means we're going to get plenty of misprediction with extrapolation
