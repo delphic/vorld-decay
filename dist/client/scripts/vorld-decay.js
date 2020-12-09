@@ -458,6 +458,10 @@ var Input = module.exports = function() {
 		canvas.requestPointerLock();
 	};
 
+	exports.releasePointerLock = function() {
+		document.exitPointerLock();
+	};
+
 	var MouseDelta = exports.MouseDelta = [0, 0];
 	var MousePosition = exports.MousePosition = [0, 0];
 
@@ -2161,13 +2165,16 @@ window.onload = (event) => {
         setupLocalServer();
       } else if (acknowledged) {
         // Handle Disconnect
-        alert("Disconnected from Server!");
+        GameClient.ondisconnect();
+        // TODO: Could conceivable spin up a local server at this point
+        // passing in GameClient.world instead of generating a new one
+        // and passing in local player curent state
       }
     }
   });
 };
 
-},{"./client/connection":18,"./client/game-client":19,"./common/game-server":25,"./common/websocket-close-codes":31}],17:[function(require,module,exports){
+},{"./client/connection":18,"./client/game-client":19,"./common/game-server":25,"./common/websocket-close-codes":32}],17:[function(require,module,exports){
 // Character Controller handles physics and movement for characters (players)
 let Fury = require('../../fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
@@ -2501,7 +2508,7 @@ var CharacterController = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":30}],18:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":31}],18:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2530,7 +2537,9 @@ var Connection = module.exports = (function() {
 
   exports.send = (obj) => {
     if (webSocket.readyState == 1) {
-      webSocket.send(JSON.stringify(obj));
+      let data = JSON.stringify(obj);
+      if (isDebug && obj.type != "position") console.log(data);
+      webSocket.send(data);
     }
   };
 
@@ -2679,9 +2688,15 @@ let GameClient = module.exports = (function(){
     if (localPlayer) {
       // Check for request pickup and send pickup message
       if (localPlayer.requestPickup) {
+        // TODO: Arguably should set something to prevent rerequests until have response
         localPlayer.requestPickup = false;
-         // TODO: Arguably should set something to prevent rerequests until have response
-        sendMessage(localPlayer.pickupMessage);
+        if (!localPlayer.heldItem) {
+          sendMessage(localPlayer.pickupMessage);
+        } else {
+          // HACK: should probably disambiguate input between interact and pickup
+          sendMessage(localPlayer.interactMessage);
+        }
+
       }
       if (localPlayer.requestDrop) {
         localPlayer.requestDrop = false;
@@ -2741,7 +2756,34 @@ let GameClient = module.exports = (function(){
       case MessageType.DROP:
         dropPickups(message.id);
         break;
+      case MessageType.INTERACT:
+        let interactable = world.getInteractable(message.interactableId);
+        let heldItem = world.getPickup(message.pickupId);
+        let resultPos = interactable.interact(heldItem);
+        if (resultPos) {
+          if (heldItem) {
+            heldItem.enabled = false;
+            vec3.copy(heldItem.position, resultPos);
+            quat.identity(heldItem.rotation);
+          } else {
+            console.error("Unable to find held item with id " + message.pickupId);
+          }
+          let player = getPlayer(message.id);
+          if (player) {
+            player.heldItem = null;
+          } else {
+            console.error("Unable to find player with id " + message.id);
+          }
+        }
+        break;
     }
+  };
+
+  exports.ondisconnect = () => {
+    if (Fury.Input.isPointerLocked()) {
+      Fury.Input.releasePointerLock();
+    }
+    alert("Disconnected from Server!");
   };
 
   let handleInitialServerState = (state) => {
@@ -2772,26 +2814,34 @@ let GameClient = module.exports = (function(){
       if (state.pickups[i].owner != null) {
         assignPickup(state.pickups[i].id, state.pickups[i].owner);
       } else {
-        let pickup = getPickup(state.pickups[i].id);
+        let pickup = world.getPickup(state.pickups[i].id);
         if (pickup) {
           vec3.copy(pickup.position, state.pickups[i].position);
+        }
+      }
+    }
+
+    for (let i = 0, l = state.interactables.length; i < l; i++) {
+      let interactableState = state.interactables[i];
+      if (interactableState) {
+        let id = interactableState.id;
+        let interactable = world.getInteractable(id);
+        if (interactable) {
+          // Copy power values
+          for (let j = 0, n = interactableState.power.length; j < n; j++) {
+            interactable.power[j] = interactableState.power[j];
+          }
+          if (interactable.onmessage) {
+            interactable.onmessage("init");
+          }
         }
       }
     }
   };
 
   // We should probably move these get methods to world
-  let getPickup = (pickupId) => {
-    for (let i = 0, l = world.pickups.length; i < l; i++) {
-      if (world.pickups[i].id == pickupId) {
-        return world.pickups[i];
-      }
-    }
-    return null;
-  };
-
   let assignPickup = (pickupId, playerId) => {
-    let pickup = getPickup(pickupId);
+    let pickup = world.getPickup(pickupId);
     if (pickup) {
       pickup.enabled = false;
       let player = getPlayer(playerId);
@@ -2874,7 +2924,7 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":26,"../common/world":32,"./player":21,"./player-visuals":20,"./world-visuals":24}],20:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":27,"../common/world":33,"./player":21,"./player-visuals":20,"./world-visuals":24}],20:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
@@ -3020,7 +3070,6 @@ let Player = module.exports = (function() {
       yVelocity: 0
     };
 
-
     player.id = params.id;
     player.snapCamera = true;
     player.isReplica = !!params.isReplica;
@@ -3052,7 +3101,9 @@ let Player = module.exports = (function() {
         type: MessageType.PICKUP,
         position: [0,0,0]
       };
-
+      player.interactMessage = {
+        type: MessageType.INTERACT
+      };
       player.dropMessage = {
         type: MessageType.DROP
       };
@@ -3189,7 +3240,7 @@ let Player = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":26,"./character-controller":17}],22:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/message-types":27,"./character-controller":17}],22:[function(require,module,exports){
 // Helper for creating mesh primitives
 let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
@@ -3642,7 +3693,7 @@ let WorldVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/pickup":27,"./primitives":22,"./shaders":23}],25:[function(require,module,exports){
+},{"../../fury/src/fury.js":4,"../common/pickup":28,"./primitives":22,"./shaders":23}],25:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -3665,7 +3716,8 @@ let GameServer = module.exports = (function() {
   // them as such and have classes for them
   let globalState = {
     players: [],
-    pickups: []
+    pickups: [],
+    interactables: []  // network interactables power state
   };
   let world = World.create();
 
@@ -3673,8 +3725,8 @@ let GameServer = module.exports = (function() {
     sendMessage = sendDelegate;
     distributeMessage = distributeDelegate;
 
-    globalState.level = "test";
-    world.createLevel("test");
+    globalState.level = "debug";
+    world.createLevel("debug");
   };
 
   exports.onclientconnect = (id) => {
@@ -3740,6 +3792,51 @@ let GameServer = module.exports = (function() {
           distributeMessage(-1, message);
         }
         break;
+      case MessageType.INTERACT:
+        // Call interact then update global state
+        // and distribute
+        let position = globalState.players[id].position;
+        console.log("Interact Received");
+        // Look for interactable at player position
+        for (let i = 0, l = world.interactables.length; i < l; i++) {
+          let interactable = world.interactables[i];
+          console.log("Interactable Id " + interactable.id);
+          if (interactable.canInteract(position)) {
+            console.log("Interacted!");
+            // Interact!
+            let heldPickupState = getHeldPickup(id);
+            let heldPickup = null;
+            if (heldPickupState) {
+              heldPickup = world.getPickup(heldPickupState.id);
+            }
+            let result = interactable.interact(heldPickup);
+            if (result) {
+              // Update world object (will want to do this on client too)
+              heldPickup.enabled = false;
+              Maths.vec3.copy(heldPickup.position, result);
+              // Don't have server side player objects so don't need to explicitly
+              // set player.heldItem to null, updating the heldPickupState does that
+
+              // Update global state
+              heldPickupState.owner = null;
+              heldPickupState.position = cloneArray3(result);
+              setInteractableGlobalState(interactable.id, interactable.power);
+
+              // Set message pickup id
+              message.pickupId = heldPickup.id
+            }
+
+            // If we expand what interactables can do, e.g. just switches
+            // need to respond to state change here and put it in global state
+
+            message.id = id;
+            message.interactableId = interactable.id;
+            distributeMessage(-1, message);
+            break;
+          }
+          console.log("Did not interact");
+        }
+        break;
       case MessageType.POSITION:  // This is more a player transform / input sync
         message.id = id;
 
@@ -3794,40 +3891,69 @@ let GameServer = module.exports = (function() {
     }
   };
 
-  let setPickupGlobalState = (id, owner) => {
+  let setPickupGlobalState = (id, owner, position) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].id == id) {
         globalState.pickups[i].owner = owner;
-        globalState.pickups[i].position = null;
+        if (position) {
+          if (globalState.pickups[i].position) {
+            copyArray3(globalState.pickups[i].position, position);
+          } else {
+            globalState.pickups[i].position = cloneArray3(position);
+          }
+        } else {
+          globalState.pickups[i].position = null;
+        }
         return;
       }
     }
-    globalState.pickups.push({ id: id, owner: owner, position: null })
+    globalState.pickups.push({
+      id: id,
+      owner: owner,
+      position: position ? cloneArray3(position) : null
+    });
   };
 
-  let isHoldingPickup = (id) => {
+  let setInteractableGlobalState = (id, power) => {
+    for (let i = 0, l = globalState.interactables.length; i < l; i++) {
+      if (globalState.interactables[i].id == id) {
+        globalState.interactables[i].power = power.slice();
+        return;
+      }
+    }
+    globalState.interactables.push({ id: id, power: power.slice() });
+  };
+
+  let isHoldingPickup = (playerId) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].owner == id) {
+      if (globalState.pickups[i].owner == playerId) {
         return true;
       }
     }
     return false;
   };
 
+  let getHeldPickup = (playerId) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].owner == playerId) {
+        return globalState.pickups[i];
+      }
+    }
+    return null;
+  };
+
   let dropPickups = (id) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].owner == id) {
         // calculate drop position (just player position for now)
-        let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
+        let dropPosition = globalState.players[id].position;
+         // TODO: drop to current held position, use method on world to calculate?
 
         // re-enable world pickup
-        for (let j = 0, n = world.pickups.length; j < n; j++) {
-          let pickup = world.pickups[j];
-          if (pickup.id == globalState.pickups[i].id) {
-            pickup.enabled = true;
-            Maths.vec3.copy(pickup.position, dropPosition);
-            break;
-          }
+        let pickup = world.getPickup(globalState.pickups[i].id);
+        if (pickup) {
+          pickup.enabled = true;
+          Maths.vec3.copy(pickup.position, dropPosition);
         }
 
         // update global state pickup
@@ -3850,7 +3976,165 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":26,"./world":32}],26:[function(require,module,exports){
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":27,"./world":33}],26:[function(require,module,exports){
+// A static world object which can be interacted with in some way
+// This might be better described as a static trigger (with pickup being a dynamic trigger)
+let Maths = require('../../fury/src/maths');
+let Bounds = require('../../fury/src/bounds');
+let quat = Maths.quat, vec3 = Maths.vec3;
+
+let Interactable = module.exports = (function() {
+  let exports = {};
+  let prototype = {
+    interact: function(heldItem) {
+      /* by default do nothing but have an interact method */
+      /* Should return a position to move item to if heldItem was taken */
+    },
+    canInteract: function(position) {
+      return Bounds.contains(position, this.bounds);
+    }
+  };
+
+  // Arguably rather than this enum/switch based pattern on type we could have other modules
+  // which Object.create(Interactable.create(params)); and then add additional logic / setup
+  var Type = exports.Type = {
+    // Sound maker
+    // Core Charger / Dispenser (?)
+    TELEPORTER_CONTROL: "teleporter_control"
+  };
+
+  let createTeleporterControl = function(interactable, params) {
+    interactable.teleporter = params.teleporter;
+    // TODO: Push this control to teleporter (probably easier to have multiple)
+    // power block points requiring cores each than one requiring multiple
+
+    if (params.powerRequirements != null) {
+      interactable.powerRequirements = params.powerRequirements;  // Array of core numbers needed
+    } else {
+      interactable.powerRequirements = [];
+    }
+    if (params.startingPower != null) {
+      interactable.power = params.startingPower;
+    } else {
+      interactable.power = [];
+    }
+    // Fill power array with numbers
+    for (let i = interactable.power.length; i < interactable.powerRequirements.length; i++) {
+      interactable.power[i] = 0;
+    }
+
+    interactable.isPowered = function() {
+      if (interactable.powerRequirements) {
+        for (let i = 0, l = interactable.power.length; i < l; i++) {
+          if (interactable.power[i] < interactable.powerRequirements[i]) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    // TODO: Replace these messages with observer pattern
+    let message = function(message) {
+      console.log(message);
+      if (interactable.visual && interactable.visual.onmessage) {
+        interactable.visual.onmessage(message);
+      }
+    };
+
+    let messageTeleporter = function(message) {
+      if (interactable.teleporter.visual && interactable.teleporter.visual.onmessage) {
+        interactable.visual.onmessage(message);
+      }
+    };
+
+    let attachPosition = vec3.create();
+
+    interactable.interact = function(heldItem) {
+      if (!interactable.isPowered()) {
+        if (heldItem) {
+          let coreIndex = heldItem.getCoreIndex();
+          if (coreIndex >= 0 && coreIndex < interactable.power.length
+            && interactable.power[coreIndex] < interactable.powerRequirements[coreIndex]) {
+            // Interaction successful - took power core
+            interactable.power[coreIndex] += 1;
+            if (interactable.isPowered()) {
+              // Enable teleporter
+              // TODO: Just tell the teleporter you're powered
+              // that way it can decide depending on how many control panels it has
+              interactable.teleporter.enabled = true;
+              message("powered");
+              messageTeleporter("powered");
+            } else {
+              message("took_core");
+            }
+            // HACK: place at bounds center - z
+            vec3.scaleAndAdd(attachPosition, interactable.bounds.center, Maths.vec3Z, -1);
+            return attachPosition;
+          } else {
+            // Interaction Unsuccessful - invalid core and unpowered
+            message("invalid_core");
+          }
+        } else {
+          // Interaction Unsuccessful - unpowered
+          message("unpowered");
+        }
+      } else {
+        // Interaction (un)successful - already powered
+        message("already_powered");
+      }
+
+      return null;
+      // Q: Maybe control panel should toggle teleporter even if power requirements met?
+    };
+
+    // Disable teleporter if unpowered
+    if (!interactable.isPowered()) {
+      interactable.teleporter.enabled = false;
+    }
+  };
+
+  exports.create = (params) => {
+    // Required: id, type, min, size (+ more based on type)
+    let interactable = Object.create(prototype);
+
+    // Currently don't expect interactables to move
+    // if they need to move in future will need to make sure bounds
+    // are recalculated when queried and/or when moved
+
+    interactable.id = params.id;  // Consider just using guids c.f. https://github.com/uuidjs/uuid
+    interactable.type = params.type;
+    // NOTE: no enabled option as we should respond even if 'disabled' based on state
+
+    // Interaction bounds
+    let size;
+    if (params.size) {
+      size = params.size;
+    } else {
+      size = vec3.fromValues(1,2,1);
+    }
+    let min = vec3.clone(params.min);
+    let max = vec3.create();
+    vec3.add(max, min, size);
+    interactable.bounds = Bounds.create({ min: min, max: max });
+
+    // Append interact method
+    switch(params.type) {
+      case Type.TELEPORTER_CONTROL: // requires params.teleporter, optional: powerRequirements, startingPower
+        createTeleporterControl(interactable, params);
+        break;
+    }
+
+    // TODO: Some concept of state (on/off)
+    // TODO: link to other items, e.g. teleporters
+
+    return interactable;
+  };
+
+  return exports;
+})();
+
+},{"../../fury/src/bounds":2,"../../fury/src/maths":8}],27:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -3859,10 +4143,11 @@ var MessageType = module.exports = {
   ACKNOWLEDGE: "acknowledge",
   POSITION: "position",
   PICKUP: "pickup",
-  DROP: "drop"
+  DROP: "drop",
+  INTERACT: "interact"
 };
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 // This might be more generic than pickup but I can't think of a better name
 // These are objects that exist in the world, and if a player root is in bounds
 // they either pick it up automatically or they can press a key to pick it up.
@@ -3940,7 +4225,7 @@ let Pickup = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/maths":8,"../../fury/src/physics":11}],28:[function(require,module,exports){
+},{"../../fury/src/maths":8,"../../fury/src/physics":11}],29:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {
@@ -3989,7 +4274,7 @@ var Chunk = module.exports = (function() {
   return exports;
 })();
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 // TODO: This should be actual config not a class ?
 var VorldConfig = module.exports = (function() {
   var exports = {};
@@ -4078,7 +4363,7 @@ var VorldConfig = module.exports = (function() {
   return exports;
 })();
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 let Chunk = require('./chunk');
 
 let Vorld = module.exports = (function() {
@@ -4231,7 +4516,7 @@ let Vorld = module.exports = (function() {
   return exports;
 })();
 
-},{"./chunk":28}],31:[function(require,module,exports){
+},{"./chunk":29}],32:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -4243,7 +4528,7 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 let Fury = require('../../fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
@@ -4251,6 +4536,7 @@ let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
 let Pickup = require('./pickup');
+let Interactable = require('./interactable');
 
 let World = module.exports = (function() {
   // Contains AABBs of the world environment
@@ -4273,6 +4559,28 @@ let World = module.exports = (function() {
           results.push(box);
         }
       }
+    },
+    getPickup: function(id) {
+      if (id) {
+        let pickups = this.pickups;
+        for (let i = 0, l = pickups.length; i < l; i++) {
+          if (pickups[i] && pickups[i].id == id) {
+            return pickups[i];
+          }
+        }
+      }
+      return null;
+    },
+    getInteractable: function(id) {
+      if (id) {
+        let interactables = this.interactables;
+        for (let i = 0, l = interactables.length; i < l; i++) {
+          if (interactables[i] && interactables[i].id === id) {
+            return interactables[i];
+          }
+        }
+      }
+      return null;
     }
   };
 
@@ -4284,8 +4592,9 @@ let World = module.exports = (function() {
     world.vorld = vorld;
     world.boxes = [];
     world.teleporters = [];
-    world.pickups = [];
+    world.pickups = [];     // Dynamic so are networked in game server
     world.initialSpawnPosition = [0, 1, 0];
+    world.interactables = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -4326,7 +4635,27 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ enabled: true, targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
+      let teleporter = {
+        enabled: true,
+        targetPosition: targetPoint,
+        targetRotation: targetRotation,
+        bounds: teleporterBounds
+      };
+      world.teleporters.push(teleporter);
+      return teleporter;
+    };
+
+    let createTeleporterControl = function(id, x, y, z, teleporter, powerRequirements) {
+      let teleporterControlBlock = VorldConfig.BlockIds.PLANKS;
+      fill(x,x,y,y,z,z, teleporterControlBlock);
+      let control = Interactable.create({
+        id: id,
+        type: Interactable.Type.TELEPORTER_CONTROL,
+        min: vec3.fromValues(x,y,z+1), // default size 1,2,1
+        teleporter: teleporter,
+        powerRequirements: powerRequirements
+      });
+      world.interactables.push(control);
     };
 
     let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
@@ -4347,11 +4676,20 @@ let World = module.exports = (function() {
 
     world.createLevel = (levelName) => {
       switch(levelName) {
-        case "test":
+        case "debug":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
-          createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+          // Note target position should add player y extents as player position
+          // isn't at the bottom of it's box cause we're insane
+          let targetPosition = vec3.fromValues(-99.5,1,0.5);
+          createTeleporterControl(
+            "teleporter_control_1",
+            -2, 0, -9,
+            createTeleporter(0, 0,-9, targetPosition, Maths.quatEuler(0, 180, 0)),
+            [1] // requires one red core
+          );
           createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
+
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);
@@ -4371,4 +4709,4 @@ let World = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./pickup":27,"./vorld/config":29,"./vorld/vorld":30}]},{},[16]);
+},{"../../fury/src/fury.js":4,"./interactable":26,"./pickup":28,"./vorld/config":30,"./vorld/vorld":31}]},{},[16]);

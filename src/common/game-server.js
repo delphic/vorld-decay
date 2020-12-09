@@ -20,7 +20,8 @@ let GameServer = module.exports = (function() {
   // them as such and have classes for them
   let globalState = {
     players: [],
-    pickups: []
+    pickups: [],
+    interactables: []  // network interactables power state
   };
   let world = World.create();
 
@@ -28,8 +29,8 @@ let GameServer = module.exports = (function() {
     sendMessage = sendDelegate;
     distributeMessage = distributeDelegate;
 
-    globalState.level = "test";
-    world.createLevel("test");
+    globalState.level = "debug";
+    world.createLevel("debug");
   };
 
   exports.onclientconnect = (id) => {
@@ -95,6 +96,51 @@ let GameServer = module.exports = (function() {
           distributeMessage(-1, message);
         }
         break;
+      case MessageType.INTERACT:
+        // Call interact then update global state
+        // and distribute
+        let position = globalState.players[id].position;
+        console.log("Interact Received");
+        // Look for interactable at player position
+        for (let i = 0, l = world.interactables.length; i < l; i++) {
+          let interactable = world.interactables[i];
+          console.log("Interactable Id " + interactable.id);
+          if (interactable.canInteract(position)) {
+            console.log("Interacted!");
+            // Interact!
+            let heldPickupState = getHeldPickup(id);
+            let heldPickup = null;
+            if (heldPickupState) {
+              heldPickup = world.getPickup(heldPickupState.id);
+            }
+            let result = interactable.interact(heldPickup);
+            if (result) {
+              // Update world object (will want to do this on client too)
+              heldPickup.enabled = false;
+              Maths.vec3.copy(heldPickup.position, result);
+              // Don't have server side player objects so don't need to explicitly
+              // set player.heldItem to null, updating the heldPickupState does that
+
+              // Update global state
+              heldPickupState.owner = null;
+              heldPickupState.position = cloneArray3(result);
+              setInteractableGlobalState(interactable.id, interactable.power);
+
+              // Set message pickup id
+              message.pickupId = heldPickup.id
+            }
+
+            // If we expand what interactables can do, e.g. just switches
+            // need to respond to state change here and put it in global state
+
+            message.id = id;
+            message.interactableId = interactable.id;
+            distributeMessage(-1, message);
+            break;
+          }
+          console.log("Did not interact");
+        }
+        break;
       case MessageType.POSITION:  // This is more a player transform / input sync
         message.id = id;
 
@@ -149,40 +195,69 @@ let GameServer = module.exports = (function() {
     }
   };
 
-  let setPickupGlobalState = (id, owner) => {
+  let setPickupGlobalState = (id, owner, position) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].id == id) {
         globalState.pickups[i].owner = owner;
-        globalState.pickups[i].position = null;
+        if (position) {
+          if (globalState.pickups[i].position) {
+            copyArray3(globalState.pickups[i].position, position);
+          } else {
+            globalState.pickups[i].position = cloneArray3(position);
+          }
+        } else {
+          globalState.pickups[i].position = null;
+        }
         return;
       }
     }
-    globalState.pickups.push({ id: id, owner: owner, position: null })
+    globalState.pickups.push({
+      id: id,
+      owner: owner,
+      position: position ? cloneArray3(position) : null
+    });
   };
 
-  let isHoldingPickup = (id) => {
+  let setInteractableGlobalState = (id, power) => {
+    for (let i = 0, l = globalState.interactables.length; i < l; i++) {
+      if (globalState.interactables[i].id == id) {
+        globalState.interactables[i].power = power.slice();
+        return;
+      }
+    }
+    globalState.interactables.push({ id: id, power: power.slice() });
+  };
+
+  let isHoldingPickup = (playerId) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].owner == id) {
+      if (globalState.pickups[i].owner == playerId) {
         return true;
       }
     }
     return false;
   };
 
+  let getHeldPickup = (playerId) => {
+    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+      if (globalState.pickups[i].owner == playerId) {
+        return globalState.pickups[i];
+      }
+    }
+    return null;
+  };
+
   let dropPickups = (id) => {
     for (let i = 0, l = globalState.pickups.length; i < l; i++) {
       if (globalState.pickups[i].owner == id) {
         // calculate drop position (just player position for now)
-        let dropPosition = globalState.players[id].position;  // TODO: drop to floor, use method on world
+        let dropPosition = globalState.players[id].position;
+         // TODO: drop to current held position, use method on world to calculate?
 
         // re-enable world pickup
-        for (let j = 0, n = world.pickups.length; j < n; j++) {
-          let pickup = world.pickups[j];
-          if (pickup.id == globalState.pickups[i].id) {
-            pickup.enabled = true;
-            Maths.vec3.copy(pickup.position, dropPosition);
-            break;
-          }
+        let pickup = world.getPickup(globalState.pickups[i].id);
+        if (pickup) {
+          pickup.enabled = true;
+          Maths.vec3.copy(pickup.position, dropPosition);
         }
 
         // update global state pickup

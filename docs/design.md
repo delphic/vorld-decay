@@ -34,6 +34,13 @@ Simple version might be 'keys' (that aren't consumed), so rather than having to 
 again you find the corpse and retrieve them, this also opens the possibility of sharing keys
 with other players.
 
+## Puzzle Reset
+By default our puzzles remain solved. Either we need to reset the pickups and state...
+or we just instantiate new players in the current section.
+
+Whilst it goes against the "find clues from dead players" aspect, it does bring new players
+together so I think we're a fan of "instantiate new players in the latest section".
+
 ### Atmosphere
 'Bugs' / Plant Growth
 Machine Hums

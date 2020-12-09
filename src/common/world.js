@@ -5,6 +5,7 @@ let vec3 = Maths.vec3, quat = Maths.quat;
 let Vorld = require('./vorld/vorld');
 let VorldConfig = require('./vorld/config');
 let Pickup = require('./pickup');
+let Interactable = require('./interactable');
 
 let World = module.exports = (function() {
   // Contains AABBs of the world environment
@@ -27,6 +28,28 @@ let World = module.exports = (function() {
           results.push(box);
         }
       }
+    },
+    getPickup: function(id) {
+      if (id) {
+        let pickups = this.pickups;
+        for (let i = 0, l = pickups.length; i < l; i++) {
+          if (pickups[i] && pickups[i].id == id) {
+            return pickups[i];
+          }
+        }
+      }
+      return null;
+    },
+    getInteractable: function(id) {
+      if (id) {
+        let interactables = this.interactables;
+        for (let i = 0, l = interactables.length; i < l; i++) {
+          if (interactables[i] && interactables[i].id === id) {
+            return interactables[i];
+          }
+        }
+      }
+      return null;
     }
   };
 
@@ -38,8 +61,9 @@ let World = module.exports = (function() {
     world.vorld = vorld;
     world.boxes = [];
     world.teleporters = [];
-    world.pickups = [];
+    world.pickups = [];     // Dynamic so are networked in game server
     world.initialSpawnPosition = [0, 1, 0];
+    world.interactables = [];
 
     let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
       for (let x = xMin; x <= xMax; x++) {
@@ -80,7 +104,27 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ enabled: true, targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
+      let teleporter = {
+        enabled: true,
+        targetPosition: targetPoint,
+        targetRotation: targetRotation,
+        bounds: teleporterBounds
+      };
+      world.teleporters.push(teleporter);
+      return teleporter;
+    };
+
+    let createTeleporterControl = function(id, x, y, z, teleporter, powerRequirements) {
+      let teleporterControlBlock = VorldConfig.BlockIds.PLANKS;
+      fill(x,x,y,y,z,z, teleporterControlBlock);
+      let control = Interactable.create({
+        id: id,
+        type: Interactable.Type.TELEPORTER_CONTROL,
+        min: vec3.fromValues(x,y,z+1), // default size 1,2,1
+        teleporter: teleporter,
+        powerRequirements: powerRequirements
+      });
+      world.interactables.push(control);
     };
 
     let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
@@ -101,11 +145,20 @@ let World = module.exports = (function() {
 
     world.createLevel = (levelName) => {
       switch(levelName) {
-        case "test":
+        case "debug":
           // Placeholder level creation
           createRoom(-5,0,-10, 11,5,11);
-          createTeleporter(0, 0,-9, vec3.fromValues(-99.5,1,0.5), Maths.quatEuler(0, 180, 0));  // Note target position should add player size as player isn't root isn't at the bottom cause we're mad
+          // Note target position should add player y extents as player position
+          // isn't at the bottom of it's box cause we're insane
+          let targetPosition = vec3.fromValues(-99.5,1,0.5);
+          createTeleporterControl(
+            "teleporter_control_1",
+            -2, 0, -9,
+            createTeleporter(0, 0,-9, targetPosition, Maths.quatEuler(0, 180, 0)),
+            [1] // requires one red core
+          );
           createPickup("test_pickup1", Pickup.visualIds.REDCORE, -3, 0.5, -9, 1.5, false);
+
 
           let d = 30;
           createRoom(-101, 0, -1, 3, 3, d);

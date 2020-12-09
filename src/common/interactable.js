@@ -7,15 +7,18 @@ let quat = Maths.quat, vec3 = Maths.vec3;
 let Interactable = module.exports = (function() {
   let exports = {};
   let prototype = {
-    interact: () => { /* by default do nothing but have an interact method */ },
-    canInteract: (position) => {
-      return this.enabled && Bounds.contains(position, this.bounds);
+    interact: function(heldItem) {
+      /* by default do nothing but have an interact method */
+      /* Should return a position to move item to if heldItem was taken */
+    },
+    canInteract: function(position) {
+      return Bounds.contains(position, this.bounds);
     }
   };
 
   // Arguably rather than this enum/switch based pattern on type we could have other modules
   // which Object.create(Interactable.create(params)); and then add additional logic / setup
-  var type = exports.type = {
+  var Type = exports.Type = {
     // Sound maker
     // Core Charger / Dispenser (?)
     TELEPORTER_CONTROL: "teleporter_control"
@@ -23,6 +26,9 @@ let Interactable = module.exports = (function() {
 
   let createTeleporterControl = function(interactable, params) {
     interactable.teleporter = params.teleporter;
+    // TODO: Push this control to teleporter (probably easier to have multiple)
+    // power block points requiring cores each than one requiring multiple
+
     if (params.powerRequirements != null) {
       interactable.powerRequirements = params.powerRequirements;  // Array of core numbers needed
     } else {
@@ -34,7 +40,7 @@ let Interactable = module.exports = (function() {
       interactable.power = [];
     }
     // Fill power array with numbers
-    for (let i = interactable.power.length; i < powerRequirements.length; i++) {
+    for (let i = interactable.power.length; i < interactable.powerRequirements.length; i++) {
       interactable.power[i] = 0;
     }
 
@@ -51,6 +57,7 @@ let Interactable = module.exports = (function() {
 
     // TODO: Replace these messages with observer pattern
     let message = function(message) {
+      console.log(message);
       if (interactable.visual && interactable.visual.onmessage) {
         interactable.visual.onmessage(message);
       }
@@ -62,23 +69,29 @@ let Interactable = module.exports = (function() {
       }
     };
 
-    interactable.interact = function(playerId, heldItem, takePickupCallback) {
+    let attachPosition = vec3.create();
+
+    interactable.interact = function(heldItem) {
       if (!interactable.isPowered()) {
         if (heldItem) {
           let coreIndex = heldItem.getCoreIndex();
-          if (coreIndex >= 0 && coreIndex < interactable.power
+          if (coreIndex >= 0 && coreIndex < interactable.power.length
             && interactable.power[coreIndex] < interactable.powerRequirements[coreIndex]) {
             // Interaction successful - took power core
             interactable.power[coreIndex] += 1;
             if (interactable.isPowered()) {
               // Enable teleporter
+              // TODO: Just tell the teleporter you're powered
+              // that way it can decide depending on how many control panels it has
               interactable.teleporter.enabled = true;
               message("powered");
               messageTeleporter("powered");
             } else {
               message("took_core");
             }
-            takePickupCallback();
+            // HACK: place at bounds center - z
+            vec3.scaleAndAdd(attachPosition, interactable.bounds.center, Maths.vec3Z, -1);
+            return attachPosition;
           } else {
             // Interaction Unsuccessful - invalid core and unpowered
             message("invalid_core");
@@ -91,6 +104,9 @@ let Interactable = module.exports = (function() {
         // Interaction (un)successful - already powered
         message("already_powered");
       }
+
+      return null;
+      // Q: Maybe control panel should toggle teleporter even if power requirements met?
     };
 
     // Disable teleporter if unpowered
@@ -107,12 +123,9 @@ let Interactable = module.exports = (function() {
     // if they need to move in future will need to make sure bounds
     // are recalculated when queried and/or when moved
 
-    interactable.id = params.id;
+    interactable.id = params.id;  // Consider just using guids c.f. https://github.com/uuidjs/uuid
     interactable.type = params.type;
-    interactable.enabled = true;
-    if (params.enabled !== undefined) {
-      interactable.enabled = params.enabled;
-    }
+    // NOTE: no enabled option as we should respond even if 'disabled' based on state
 
     // Interaction bounds
     let size;
@@ -121,10 +134,6 @@ let Interactable = module.exports = (function() {
     } else {
       size = vec3.fromValues(1,2,1);
     }
-    let boundsOffset = vec3.create();
-    if (params.boundsOffset) {
-      boundsOffset.copy(params.boundsOffset);
-    }
     let min = vec3.clone(params.min);
     let max = vec3.create();
     vec3.add(max, min, size);
@@ -132,8 +141,8 @@ let Interactable = module.exports = (function() {
 
     // Append interact method
     switch(params.type) {
-      case type.TELEPORTER_CONTROL: // requires params.teleporter
-        createTeleporterPower(interactable, params);
+      case Type.TELEPORTER_CONTROL: // requires params.teleporter, optional: powerRequirements, startingPower
+        createTeleporterControl(interactable, params);
         break;
     }
 

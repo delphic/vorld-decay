@@ -6,5 +6,6 @@ var MessageType = module.exports = {
   ACKNOWLEDGE: "acknowledge",
   POSITION: "position",
   PICKUP: "pickup",
-  DROP: "drop"
+  DROP: "drop",
+  INTERACT: "interact"
 };

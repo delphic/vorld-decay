@@ -26,7 +26,9 @@ var Connection = module.exports = (function() {
 
   exports.send = (obj) => {
     if (webSocket.readyState == 1) {
-      webSocket.send(JSON.stringify(obj));
+      let data = JSON.stringify(obj);
+      if (isDebug && obj.type != "position") console.log(data);
+      webSocket.send(data);
     }
   };
 

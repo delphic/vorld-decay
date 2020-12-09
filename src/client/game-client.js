@@ -94,9 +94,15 @@ let GameClient = module.exports = (function(){
     if (localPlayer) {
       // Check for request pickup and send pickup message
       if (localPlayer.requestPickup) {
+        // TODO: Arguably should set something to prevent rerequests until have response
         localPlayer.requestPickup = false;
-         // TODO: Arguably should set something to prevent rerequests until have response
-        sendMessage(localPlayer.pickupMessage);
+        if (!localPlayer.heldItem) {
+          sendMessage(localPlayer.pickupMessage);
+        } else {
+          // HACK: should probably disambiguate input between interact and pickup
+          sendMessage(localPlayer.interactMessage);
+        }
+
       }
       if (localPlayer.requestDrop) {
         localPlayer.requestDrop = false;
@@ -156,7 +162,34 @@ let GameClient = module.exports = (function(){
       case MessageType.DROP:
         dropPickups(message.id);
         break;
+      case MessageType.INTERACT:
+        let interactable = world.getInteractable(message.interactableId);
+        let heldItem = world.getPickup(message.pickupId);
+        let resultPos = interactable.interact(heldItem);
+        if (resultPos) {
+          if (heldItem) {
+            heldItem.enabled = false;
+            vec3.copy(heldItem.position, resultPos);
+            quat.identity(heldItem.rotation);
+          } else {
+            console.error("Unable to find held item with id " + message.pickupId);
+          }
+          let player = getPlayer(message.id);
+          if (player) {
+            player.heldItem = null;
+          } else {
+            console.error("Unable to find player with id " + message.id);
+          }
+        }
+        break;
     }
+  };
+
+  exports.ondisconnect = () => {
+    if (Fury.Input.isPointerLocked()) {
+      Fury.Input.releasePointerLock();
+    }
+    alert("Disconnected from Server!");
   };
 
   let handleInitialServerState = (state) => {
@@ -187,26 +220,34 @@ let GameClient = module.exports = (function(){
       if (state.pickups[i].owner != null) {
         assignPickup(state.pickups[i].id, state.pickups[i].owner);
       } else {
-        let pickup = getPickup(state.pickups[i].id);
+        let pickup = world.getPickup(state.pickups[i].id);
         if (pickup) {
           vec3.copy(pickup.position, state.pickups[i].position);
+        }
+      }
+    }
+
+    for (let i = 0, l = state.interactables.length; i < l; i++) {
+      let interactableState = state.interactables[i];
+      if (interactableState) {
+        let id = interactableState.id;
+        let interactable = world.getInteractable(id);
+        if (interactable) {
+          // Copy power values
+          for (let j = 0, n = interactableState.power.length; j < n; j++) {
+            interactable.power[j] = interactableState.power[j];
+          }
+          if (interactable.onmessage) {
+            interactable.onmessage("init");
+          }
         }
       }
     }
   };
 
   // We should probably move these get methods to world
-  let getPickup = (pickupId) => {
-    for (let i = 0, l = world.pickups.length; i < l; i++) {
-      if (world.pickups[i].id == pickupId) {
-        return world.pickups[i];
-      }
-    }
-    return null;
-  };
-
   let assignPickup = (pickupId, playerId) => {
-    let pickup = getPickup(pickupId);
+    let pickup = world.getPickup(pickupId);
     if (pickup) {
       pickup.enabled = false;
       let player = getPlayer(playerId);

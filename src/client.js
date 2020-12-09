@@ -58,7 +58,10 @@ window.onload = (event) => {
         setupLocalServer();
       } else if (acknowledged) {
         // Handle Disconnect
-        alert("Disconnected from Server!");
+        GameClient.ondisconnect();
+        // TODO: Could conceivable spin up a local server at this point
+        // passing in GameClient.world instead of generating a new one
+        // and passing in local player curent state
       }
     }
   });

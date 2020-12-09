@@ -111,7 +111,6 @@ let Player = module.exports = (function() {
       yVelocity: 0
     };
 
-
     player.id = params.id;
     player.snapCamera = true;
     player.isReplica = !!params.isReplica;
@@ -143,7 +142,9 @@ let Player = module.exports = (function() {
         type: MessageType.PICKUP,
         position: [0,0,0]
       };
-
+      player.interactMessage = {
+        type: MessageType.INTERACT
+      };
       player.dropMessage = {
         type: MessageType.DROP
       };
