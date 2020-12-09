@@ -108,7 +108,24 @@ let World = module.exports = (function() {
         enabled: true,
         targetPosition: targetPoint,
         targetRotation: targetRotation,
-        bounds: teleporterBounds
+        bounds: teleporterBounds,
+        controls: [],
+        onmessage: function(message) {
+          if (message == "control_powered") {
+            let wasPowered = this.enabled;
+            let powered = true;
+            for (let i = 0, l = this.controls.length; i < l; i++) {
+              if (!this.controls[i].isPowered()) {
+                powered = false;
+                break;
+              }
+            }
+            this.enabled = powered;
+            if (!wasPowered && powered && this.visual && this.visual.onmessage) {
+                this.visual.onmessage("powered")
+            }
+          }
+        }
       };
       world.teleporters.push(teleporter);
       return teleporter;

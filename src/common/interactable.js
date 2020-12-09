@@ -13,7 +13,8 @@ let Interactable = module.exports = (function() {
     },
     canInteract: function(position) {
       return Bounds.contains(position, this.bounds);
-    }
+    },
+    onmessage: function(message) { /* each type will handle messages differently */ }
   };
 
   // Arguably rather than this enum/switch based pattern on type we could have other modules
@@ -55,18 +56,24 @@ let Interactable = module.exports = (function() {
       return true;
     };
 
-    // TODO: Replace these messages with observer pattern
-    let message = function(message) {
-      if (interactable.visual && interactable.visual.onmessage) {
-        interactable.visual.onmessage(message);
+    let messageTeleporter = (message) => {
+      if (interactable.teleporter && interactable.teleporter.onmessage) {
+        interactable.teleporter.onmessage(message);
       }
     };
 
-    let messageTeleporter = function(message) {
-      if (interactable.teleporter.visual && interactable.teleporter.visual.onmessage) {
-        interactable.visual.onmessage(message);
+    let message = (message) => {
+      if (message == "init") {
+        if (interactable.isPowered()) {
+          messageTeleporter("control_powered");
+        }
+      }
+      if (interactable.visual && interactable.visual.onmessage) {
+          interactable.visual.onmessage(message);
       }
     };
+
+    interactable.onmessage = message;
 
     let attachPosition = vec3.create();
 
@@ -79,12 +86,8 @@ let Interactable = module.exports = (function() {
             // Interaction successful - took power core
             interactable.power[coreIndex] += 1;
             if (interactable.isPowered()) {
-              // Enable teleporter
-              // TODO: Just tell the teleporter you're powered
-              // that way it can decide depending on how many control panels it has
-              interactable.teleporter.enabled = true;
+              messageTeleporter("control_powered");
               message("powered");
-              messageTeleporter("powered");
             } else {
               message("took_core");
             }

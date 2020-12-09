@@ -4,7 +4,9 @@ let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
 let Interactable = require('../common/interactable');
 
-let TeleporterControlVisuals = require('./interactables/teleporter-control-visuals');
+// TODO: Maybe move these under a single visuals module
+let TeleporterVisuals = require('./visuals/teleporter-visuals');
+let TeleporterControlVisuals = require('./visuals/teleporter-control-visuals');
 
 let vec3 = Fury.Maths.vec3;
 
@@ -102,6 +104,13 @@ let WorldVisuals = module.exports = (function() {
         rotation: pickup.rotation
       });
     };
+
+    // Create teleporter Visuals
+    let teleporters = world.teleporters;
+    for (let i = 0, l = teleporters.length; i < l; i++) {
+      let teleporter = teleporters[i];
+      teleporter.visual = TeleporterVisuals.create({ teleporter: teleporter });
+    }
 
     // Create Pickup Visuals
     let pickups = world.pickups;
