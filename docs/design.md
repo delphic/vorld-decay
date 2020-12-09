@@ -42,6 +42,8 @@ Dark fog, some materials have lower simulated fog density and appear to glow.
 ### Stretch Goals
 Environmental hazards beyond drops
 Enemies and Basic Combat
+  This pretty much requires having a server side game loop, which we're a little concerned about doing due to performance concerns.
+  Might be fun to try, but we should keep an eye on VPS performance if / when we deploy it.
 
 ## Environment Generation
 We want loops in the environment but they're quite hard to actually generate, so

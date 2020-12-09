@@ -4,6 +4,9 @@ let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
 let vec3 = Fury.Maths.vec3;
 
+// Implicitly contains pickup / core visuals
+// arguably should split those out into separate modules
+
 let WorldVisuals = module.exports = (function() {
   let exports = {};
 

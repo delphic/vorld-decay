@@ -3491,6 +3491,9 @@ let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
 let vec3 = Fury.Maths.vec3;
 
+// Implicitly contains pickup / core visuals
+// arguably should split those out into separate modules
+
 let WorldVisuals = module.exports = (function() {
   let exports = {};
 
@@ -3682,22 +3685,28 @@ let GameServer = module.exports = (function() {
 
   // Helpers for copying into DTOs
   // TODO: Move to common so we can reuse for client side DTOs
+  // note + converts back from string to number, arguably should use round
+  // https://stackoverflow.com/a/41716722
+  let round = (num) => {
+    return Math.round(num * 100 + Number.EPSILON) / 100;
+  };
+
   let cloneArray3 = (array) => {
-    return [ array[0].toFixed(2), array[1].toFixed(2), array[2].toFixed(2) ];
+    return [ round(array[0]), round(array[1]), round(array[2]) ];
   };
   let copyArray3 = (out, array) => {
-    out[0] = array[0].toFixed(2);
-    out[1] = array[1].toFixed(2);
-    out[2] = array[2].toFixed(2);
+    out[0] = round(array[0]);
+    out[1] = round(array[1]);
+    out[2] = round(array[2]);
   };
   let cloneArray4 = (array) => {
-    return [ array[0].toFixed(2), array[1].toFixed(2), array[2].toFixed(2), array[3].toFixed(2) ];
+    return [ round(array[0]), round(array[1]), round(array[2]), round(array[3]) ];
   };
   let copyArray4 = (out, array) => {
-    out[0] = array[0].toFixed(2);
-    out[1] = array[1].toFixed(2);
-    out[2] = array[2].toFixed(2);
-    out[3] = array[3].toFixed(2);
+    out[0] = round(array[0]);
+    out[1] = round(array[1]);
+    out[2] = round(array[2]);
+    out[3] = round(array[3]);
   };
 
   exports.onmessage = (id, message) => {
@@ -3746,7 +3755,7 @@ let GameServer = module.exports = (function() {
           for (let i = 0, l = world.teleporters.length; i < l; i++) {
             let teleporter = world.teleporters[i];
             // Ideally would have player concept on server now and could use it's AABB
-            if (Bounds.contains(message.position, teleporter.bounds)) {
+            if (teleporter.enabled && Bounds.contains(message.position, teleporter.bounds)) {
               shouldTeleport = true;
               // TODO: Not instant teleport please - requires game loop server side or some way to defer
               Maths.vec3.copy(message.position, teleporter.targetPosition);
@@ -3765,8 +3774,8 @@ let GameServer = module.exports = (function() {
           distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
         }
 
-        // Check for pickups
-        if (hasPositionChanged && !isHoldingPickup(id)) {
+        // Check for auto-pickups
+        if (hasPositionChanged && !isHoldingPickup(id)) { // Q: Auto pickups probably shouldn't be held?
           for (let i = 0, l = world.pickups.length; i < l; i++) {
             let pickup = world.pickups[i];
             if (pickup.autoPickup && pickup.canPickup(message.position)) {
@@ -3823,7 +3832,7 @@ let GameServer = module.exports = (function() {
 
         // update global state pickup
         globalState.pickups[i].owner = null;
-        globalState.pickups[i].position = dropPosition;
+        globalState.pickups[i].position = cloneArray3(dropPosition);  // Clone they might continue to move, lol
       }
     }
   };
@@ -3859,6 +3868,9 @@ var MessageType = module.exports = {
 // they either pick it up automatically or they can press a key to pick it up.
 // They also need to be droppable / spawnable
 
+// I've conflated the pickup trigger with the pickup object, might want
+// separate these at some point :shrug:
+
 let Maths = require('../../fury/src/maths');
 let Physics = require('../../fury/src/physics');
 let vec3 = Maths.vec3, quat = Maths.quat;
@@ -3868,10 +3880,24 @@ let Pickup = module.exports = (function() {
   let prototype = {
     canPickup: function(playerPosition) { // bounds check might be nice
       return this.enabled && Physics.Sphere.contains(playerPosition, this.sphere);
+    },
+    getCoreIndex: function() {
+      switch (this.visualId) {
+        case visualIds.REDCORE:
+          return 0;
+        case visualIds.BLUECORE:
+          return 1;
+        case visualIds.YELLOWCORE:
+          return 2;
+        case visualIds.GREENCORE:
+          return 3;
+        default:
+          return -1;
+      }
     }
   };
 
-  exports.visualIds = {
+  let visualIds = exports.visualIds = { // These really should have underscores between words
     REDCORE: "redcore",
     BLUECORE: "bluecore",
     YELLOWCORE: "yellowcore",
@@ -3882,7 +3908,7 @@ let Pickup = module.exports = (function() {
     let pickup = Object.create(prototype);
 
     pickup.id = params.id;
-    pickup.visualId = params.visualId // Used by pickup visuals to know what to make this look like!
+    pickup.visualId = params.visualId // Used by pickup visuals to know what to make this look like! also is type info
     pickup.autoPickup = params.autoPickup;
     pickup.position = params.position;
 
@@ -4300,7 +4326,7 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
+      world.teleporters.push({ enabled: true, targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
     let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {

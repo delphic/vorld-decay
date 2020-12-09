@@ -80,7 +80,7 @@ let World = module.exports = (function() {
       // TODO: Would be cool to add an outer bounds which starts some kinda visual change
       // when you enter it (client side only), and potentially would act as the enabler for
       // the inner bounds on server side.
-      world.teleporters.push({ targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
+      world.teleporters.push({ enabled: true, targetPosition: targetPoint, targetRotation: targetRotation, bounds: teleporterBounds });
     };
 
     let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
