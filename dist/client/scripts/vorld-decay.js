@@ -2756,7 +2756,7 @@ let GameClient = module.exports = (function(){
           let win = () => {
             Fury.Input.releasePointerLock();
             window.alert("You Win!");
-            window.location = window.location;  // Restart game
+            window.location = "./complete.html";  // Go to complete page
           };
           window.setTimeout(win, 1000);
         }
@@ -3230,8 +3230,10 @@ let Player = module.exports = (function() {
       if (player.heldItem) {
         // TODO: Define offset point?
         vec3.scaleAndAdd(player.heldItem.position, player.position, player.localZ, -0.5);
-        // TODO: Server should do this
-        vec3.copy(player.dropMessage.position, player.heldItem.position);
+        if (player.dropMessage) {
+          // TODO: Have server calculate drop position (as player position - 50% local Z)
+          vec3.copy(player.dropMessage.position, player.heldItem.position);
+        }
         vec3.scaleAndAdd(player.heldItem.position, player.heldItem.position, Maths.vec3Y, 0.35);
         quat.copy(player.heldItem.rotation, player.rotation);
 
@@ -4887,7 +4889,7 @@ let World = module.exports = (function() {
       }
     };
 
-    // TODO: Create spawn mehtods with listeners
+    // TODO: Create spawn methods with listeners
 
     return world;
   };

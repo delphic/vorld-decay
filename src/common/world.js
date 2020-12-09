@@ -231,7 +231,7 @@ let World = module.exports = (function() {
       }
     };
 
-    // TODO: Create spawn mehtods with listeners
+    // TODO: Create spawn methods with listeners
 
     return world;
   };

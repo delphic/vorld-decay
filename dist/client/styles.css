@@ -3,6 +3,9 @@ html, body {
   padding: 0;
   font-family: monospace;
   overflow: hidden;
+  background-color: black;
+  color: white;
+  text-align: center;
 }
 #fury {
   display: block;
