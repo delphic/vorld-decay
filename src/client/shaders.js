@@ -138,6 +138,9 @@ var Shaders = module.exports = (function() {
       }
     };
 
+  // TODO: Probably going to want a LitVertexColor for ease for use with models
+	// See model loader demo for example
+
   exports.Voxel = {
       vsSource: [
         "#version 300 es",

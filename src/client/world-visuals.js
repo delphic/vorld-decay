@@ -86,8 +86,8 @@ let WorldVisuals = module.exports = (function() {
       image.src = src;
     };
 
-    atlasMaterial.loadTexture("/images/atlas_array.png", loadCallback);
-    debugMaterial.loadTexture("/images/checkerboard.png", loadCallback);
+    atlasMaterial.loadTexture("./images/atlas_array.png", loadCallback);
+    debugMaterial.loadTexture("./images/checkerboard.png", loadCallback);
   };
 
   exports.generateVisuals = (world, scene, callback) => {
