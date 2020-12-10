@@ -141,6 +141,7 @@ let World = module.exports = (function() {
         teleporter: teleporter,
         powerRequirements: powerRequirements
       });
+      teleporter.controls.push(control);
       world.interactables.push(control);
     };
 

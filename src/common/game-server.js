@@ -80,6 +80,7 @@ let GameServer = module.exports = (function() {
           for (let i = 0, l = world.pickups.length; i < l; i++) {
             let pickup = world.pickups[i];
             if (pickup.canPickup(message.position)) {
+              // TODO: just cache and compare against distance then pikcup the closest
               // This player should pickup the object!
               pickup.enabled = false;
               setPickupGlobalState(pickup.id, id);
@@ -159,9 +160,7 @@ let GameServer = module.exports = (function() {
               Maths.vec3.copy(message.position, teleporter.targetPosition);
               Maths.quat.copy(message.rotation, teleporter.targetRotation);
               message.snapLook = true;
-              if (teleporter.win) {
-                message.win = true;
-              }
+              message.win = teleporter.win;
               break;
             }
           }

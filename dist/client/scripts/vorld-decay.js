@@ -2161,7 +2161,7 @@ var Transform = module.exports = function() {
 },{"./maths":8}],16:[function(require,module,exports){
 let CloseCode = require('./common/websocket-close-codes');
 
-let isLocalHost = true; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
+let isLocalHost = false; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
 let acknowledged = false; // Acknowledged by websocket server
 
 let Connection = require('./client/connection');
@@ -3429,38 +3429,38 @@ var Primitives = module.exports = (function() {
 let Fury = require('../../Fury/src/fury.js');
 
 var Shaders = module.exports = (function() {
-  var exports = {};
+	var exports = {};
 
-  exports.UnlitTextured = {
+	exports.UnlitTextured = {
 	 vsSource: [
 		"attribute vec3 aVertexPosition;",
-    "attribute vec2 aTextureCoord;",
+		"attribute vec2 aTextureCoord;",
 
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
+		"uniform mat4 uMVMatrix;",
+		"uniform mat4 uPMatrix;",
 
-    "varying vec2 vTextureCoord;",
-    "void main(void) {",
-        "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-        "vTextureCoord = aTextureCoord;",
-    "}"].join('\n'),
+		"varying vec2 vTextureCoord;",
+		"void main(void) {",
+				"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+				"vTextureCoord = aTextureCoord;",
+		"}"].join('\n'),
 	 fsSource: [
-     "precision mediump float;",
+		 "precision mediump float;",
 
-     "varying vec2 vTextureCoord;",
+		 "varying vec2 vTextureCoord;",
 
-     "uniform sampler2D uSampler;",
+		 "uniform sampler2D uSampler;",
 
-     "void main(void) {",
-        "gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
-     "}"].join('\n'),
+		 "void main(void) {",
+				"gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));",
+		 "}"].join('\n'),
 	 attributeNames: [ "aVertexPosition", "aTextureCoord" ],
 	 uniformNames: [ "uMVMatrix", "uPMatrix", "uSampler" ],
 	 textureUniformNames: [ "uSampler" ],
 	 pMatrixUniformName: "uPMatrix",
 	 mvMatrixUniformName: "uMVMatrix",
 	 bindMaterial: function(material) {
-     this.enableAttribute("aVertexPosition");
+		 this.enableAttribute("aVertexPosition");
 		 this.enableAttribute("aTextureCoord");
 	 },
 	 bindBuffers: function(mesh) {
@@ -3470,211 +3470,306 @@ var Shaders = module.exports = (function() {
 	 }
  };
 
-  exports.UnlitColor = {
-   vsSource: [
+	exports.UnlitColor = {
+	 vsSource: [
 		"attribute vec3 aVertexPosition;",
 
-    "uniform mat4 uMVMatrix;",
-    "uniform mat4 uPMatrix;",
+		"uniform mat4 uMVMatrix;",
+		"uniform mat4 uPMatrix;",
 
-    "void main(void) {",
-       "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-    "}"
-    ].join('\n'),
-    fsSource: [
-      "precision mediump float;",
+		"void main(void) {",
+			 "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+		"}"
+		].join('\n'),
+		fsSource: [
+			"precision mediump float;",
 
-      "uniform vec3 uColor;",
+			"uniform vec3 uColor;",
 
-      "void main(void) {",
-         "gl_FragColor = vec4(uColor, 1.0);",
-      "}"].join('\n'),
-   	 attributeNames: [ "aVertexPosition", ],
-   	 uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
-   	 pMatrixUniformName: "uPMatrix",
-   	 mvMatrixUniformName: "uMVMatrix",
-   	 bindMaterial: function(material) {
-      this.enableAttribute("aVertexPosition");
-      this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
-      // TOOD: ^^ A method to call when creating materials from the shader definition
-      // to ensure they have any additional properties might be nice
-   	 },
-   	 bindBuffers: function(mesh) {
-   		 this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-   		 this.setIndexedAttribute(mesh.indexBuffer);
-   	 }
-   };
+			"void main(void) {",
+				 "gl_FragColor = vec4(uColor, 1.0);",
+			"}"].join('\n'),
+		 attributeNames: [ "aVertexPosition", ],
+		 uniformNames: [ "uMVMatrix", "uPMatrix", "uColor" ],
+		 pMatrixUniformName: "uPMatrix",
+		 mvMatrixUniformName: "uMVMatrix",
+		 bindMaterial: function(material) {
+			this.enableAttribute("aVertexPosition");
+			this.setUniformFloat3("uColor", material.color[0], material.color[1], material.color[2]);
+			// TOOD: ^^ A method to call when creating materials from the shader definition
+			// to ensure they have any additional properties might be nice
+		 },
+		 bindBuffers: function(mesh) {
+			 this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+			 this.setIndexedAttribute(mesh.indexBuffer);
+		 }
+	 };
 
-  exports.ColorFog = {  // UnlitColor but with fog!
-      vsSource: [
-        "#version 300 es",
-        "in vec3 aVertexPosition;",
+	exports.ColorFog = {  // UnlitColor but with fog!
+			vsSource: [
+				"#version 300 es",
+				"in vec3 aVertexPosition;",
 
-        "uniform mat4 uMVMatrix;",
-        "uniform mat4 uPMatrix;",
+				"uniform mat4 uMVMatrix;",
+				"uniform mat4 uPMatrix;",
 
-        "out vec3 vViewSpacePosition;",
+				"out vec3 vViewSpacePosition;",
 
-        "void main(void) {",
-          "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+				"void main(void) {",
+					"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
 
-          "vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
-        "}"].join('\n'),
-      fsSource: [
-        "#version 300 es",
-        "precision highp float;",
+					"vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+				"}"].join('\n'),
+			fsSource: [
+				"#version 300 es",
+				"precision highp float;",
 
-        "in vec3 vViewSpacePosition;",
+				"in vec3 vViewSpacePosition;",
 
-        "uniform vec3 uFogColor;",
-        "uniform float uFogDensity;",
-        "uniform vec3 uColor;",
+				"uniform vec3 uFogColor;",
+				"uniform float uFogDensity;",
+				"uniform vec3 uColor;",
 
-        "out vec4 fragColor;",
+				"out vec4 fragColor;",
 
-        "void main(void) {",
+				"void main(void) {",
 
-            "vec4 color = vec4(uColor, 1);",
+						"vec4 color = vec4(uColor, 1);",
 
-            "#define LOG2 1.442695",
+						"#define LOG2 1.442695",
 
-            "float fogDistance = length(vViewSpacePosition);",
-            "float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
-            "fogAmount = clamp(fogAmount, 0.0, 1.0);",
+						"float fogDistance = length(vViewSpacePosition);",
+						"float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
+						"fogAmount = clamp(fogAmount, 0.0, 1.0);",
 
-            "fragColor = mix(color, vec4(uFogColor, 1.0), fogAmount);",
-        "}"].join('\n'),
-      attributeNames: [ "aVertexPosition" ],
-      uniformNames: [ "uMVMatrix", "uPMatrix", "uColor", "uFogColor", "uFogDensity" ],
-      textureUniformNames: [ ],
-      pMatrixUniformName: "uPMatrix",
-      mvMatrixUniformName: "uMVMatrix",
-      bindMaterial: function(material) {
-        // HACK: Should have a cleaner way to do this
-        // Arguably some of these are scene based variables not material,
-        // should we pass scene details in?
-        // Or just add sceneLighting property to material
-        this.setUniformVector3("uFogColor", material.fogColor);
-        this.setUniformFloat("uFogDensity", material.fogDensity);
-        this.setUniformVector3("uColor", material.color);
+						"fragColor = mix(color, vec4(uFogColor, 1.0), fogAmount);",
+				"}"].join('\n'),
+			attributeNames: [ "aVertexPosition" ],
+			uniformNames: [ "uMVMatrix", "uPMatrix", "uColor", "uFogColor", "uFogDensity" ],
+			textureUniformNames: [ ],
+			pMatrixUniformName: "uPMatrix",
+			mvMatrixUniformName: "uMVMatrix",
+			bindMaterial: function(material) {
+				// HACK: Should have a cleaner way to do this
+				// Arguably some of these are scene based variables not material,
+				// should we pass scene details in?
+				// Or just add sceneLighting property to material
+				this.setUniformVector3("uFogColor", material.fogColor);
+				this.setUniformFloat("uFogDensity", material.fogDensity);
+				this.setUniformVector3("uColor", material.color);
 
-        this.enableAttribute("aVertexPosition");
-      },
-      bindBuffers: function(mesh) {
-        this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-        this.setIndexedAttribute(mesh.indexBuffer);
-      }
-    };
+				this.enableAttribute("aVertexPosition");
+			},
+			bindBuffers: function(mesh) {
+				this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+				this.setIndexedAttribute(mesh.indexBuffer);
+			}
+		};
 
-  // TODO: Probably going to want a LitVertexColor for ease for use with models
-	// See model loader demo for example
+	exports.LitVertexColor = {
+		// This shader has two color buffers, first is the color to use, second is how much lighting and fog should effect
+		// 0 => lighting as per Voxel shader, 1 => ignores lighting and uses reduced fog
+		// Required Material Properties as per Voxel Shader but with the addition of reducedFogDensity value
+		vsSource: [
+			"#version 300 es",
+			"in vec3 aVertexPosition;",
+			"in vec3 aVertexNormal;",
+			"in vec4 aColor0;",
+			"in vec4 aColor1;",
 
-  exports.Voxel = {
-      vsSource: [
-        "#version 300 es",
-        "in vec3 aVertexPosition;",
-        "in vec2 aTextureCoord;",
-        "in vec3 aVertexNormal;",
-        "in float aTileIndex;",
+			"uniform vec3 uLightingDirection;",
+			"uniform mat4 uMVMatrix;",
+			"uniform mat4 uPMatrix;",
 
-        "uniform vec3 uLightingDirection;",
-        "uniform mat4 uMVMatrix;",
-        "uniform mat4 uPMatrix;",
+			"out vec3 vNormal;",
+			"out vec3 vViewSpacePosition;",
+			"out float vLightWeight;",
 
-        // "out vec4 vWorldPosition;",
-        "out vec2 vTextureCoord;",
-        "out vec3 vNormal;",
-        "out vec3 vViewSpacePosition;",
-        "out float vLightWeight;",
-        "out float vTileIndex;",
+			"out vec4 vColor0;",
+			"out vec4 vColor1;",
 
-        "void main(void) {",
-          "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
-          "vTextureCoord = aTextureCoord;",
-          "vNormal = aVertexNormal;",
-          "vTileIndex = aTileIndex;",
+			"void main(void) {",
+				"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+				"vNormal = aVertexNormal;",
+				"vColor0 = aColor0;",
+				"vColor1 = aColor1;",
 
-          // Greedy Meshing - UV generation - artifacts at seams
-          // Normally would mulitply this by the world / model matrix but as models
-          // are all axis aligned and we're going to be using frac value anyway, it's unnecessary
-          // "vWorldPosition = vec4(aVertexPosition + vec3(0.5, 0.5, 0.5), 1.0);",
+				"vLightWeight = 0.5 * max(dot(aVertexNormal, normalize(uLightingDirection)), 0.0);",
 
-          // Lighting Direction: vec3(-1.0,2.0,1.0)
+				"vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+			"}"].join('\n'),
+		fsSource: [
+			"#version 300 es",
+			"precision highp float;",
 
-          "vLightWeight = 0.5 * max(dot(aVertexNormal, normalize(uLightingDirection)), 0.0);",
+			"in vec3 vNormal;",
+			"in vec3 vViewSpacePosition;",
+			"in float vLightWeight;",
 
-          "vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
-        "}"].join('\n'),
-      fsSource: [
-        "#version 300 es",
-        "precision highp float;",
-        "precision highp sampler2DArray;",
+			"in vec4 vColor0;",
+			"in vec4 vColor1;",
 
-        "in vec2 vTextureCoord;",
-        //"in vec4 vWorldPosition;",
-        "in vec3 vNormal;",
-        "in vec3 vViewSpacePosition;",
-        "in float vLightWeight;",
-        "in float vTileIndex;",
+			"uniform vec3 uLightColor;",
+			"uniform vec3 uAmbientColor;",
 
-        "uniform sampler2DArray uSampler;",
-        "uniform vec3 uLightColor;",
-        "uniform vec3 uAmbientColor;",
+			"uniform vec3 uFogColor;",
+			"uniform float uFogDensity;",
+			"uniform float uReducedFogDensity;",
 
-        "uniform vec3 uFogColor;",
-        "uniform float uFogDensity;",
+			"out vec4 fragColor;",
 
-        "out vec4 fragColor;",
+			"void main(void) {",
+					"vec4 vertexColor = vColor0;",
+					"vec4 litColor = vec4(((0.5 * uAmbientColor) + (vLightWeight * uLightColor)) * vertexColor.rgb, vertexColor.a);",
+					"vec4 color = mix(litColor, vertexColor, vColor1.r);",
 
-        "void main(void) {",
-            //"vec3 pos = fract(vWorldPosition.xyz);",
+					"#define LOG2 1.442695",
 
-            //"vec2 uv = abs(vNormal.x) * pos.zy + abs(vNormal.y) * pos.xz + abs(vNormal.z) * pos.xy;",
-            //"float tileIndex = 8.0 - floor(vTextureCoord.s);",
+					"float fogDistance = length(vViewSpacePosition);",
+					"float fogDensity = mix(uFogDensity, uReducedFogDensity, vColor1.r);",
+					"float fogAmount = 1.0 - exp2(- fogDensity * fogDensity * fogDistance * fogDistance * LOG2);",
+					"fogAmount = clamp(fogAmount, 0.0, 1.0);",
 
-            "vec4 color = texture(uSampler, vec3(vTextureCoord, vTileIndex));",
-            "vec4 litColor = vec4(((0.5 * uAmbientColor) + (vLightWeight * uLightColor)) * color.rgb, color.a);",
+					"fragColor = mix(color, vec4(uFogColor, 1.0), fogAmount);",
+			"}"].join('\n'),
+		attributeNames: [ "aVertexPosition", "aVertexNormal", "aColor0", "aColor1" ],
+		uniformNames: ["uLightingDirection", "uMVMatrix", "uPMatrix", "uLightColor", "uAmbientColor", "uFogColor", "uFogDensity", "uReducedFogDensity" ],
+		textureUniformNames: [ ],
+		pMatrixUniformName: "uPMatrix",
+		mvMatrixUniformName: "uMVMatrix",
+		bindMaterial: function(material) {
+			// HACK: Should have a cleaner way to do this
+			// Arguably some of these are scene based variables not material,
+			// should we pass scene details in?
+			// Or just add sceneLighting property to material
+			this.setUniformVector3("uLightingDirection", material.lightDir);
+			this.setUniformVector3("uLightColor", material.lightColor);
+			this.setUniformVector3("uAmbientColor", material.ambientColor);
+			this.setUniformVector3("uFogColor", material.fogColor);
+			this.setUniformFloat("uFogDensity", material.fogDensity);
+			this.setUniformFloat("uReducedFogDensity", material.reducedFogDensity);
 
-            "#define LOG2 1.442695",
+			this.enableAttribute("aLightingDirection");
+			this.enableAttribute("aVertexPosition");
+			this.enableAttribute("aVertexNormal");
+			this.enableAttribute("aColor0");
+			this.enableAttribute("aColor1");
+		},
+		bindBuffers: function(mesh) {
+			this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+			this.setAttribute("aVertexNormal", mesh.normalBuffer);
+			this.setAttribute("aColor0", mesh.customBuffers["COLOR_0"]);
+			this.setAttribute("aColor1", mesh.customBuffers["COLOR_1"]);
+			this.setIndexedAttribute(mesh.indexBuffer);
+		}
+	};
 
-            "float fogDistance = length(vViewSpacePosition);",
-            "float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
-            "fogAmount = clamp(fogAmount, 0.0, 1.0);",
+	exports.Voxel = {
+			vsSource: [
+				"#version 300 es",
+				"in vec3 aVertexPosition;",
+				"in vec2 aTextureCoord;",
+				"in vec3 aVertexNormal;",
+				"in float aTileIndex;",
 
-            "fragColor = mix(litColor, vec4(uFogColor, 1.0), fogAmount);",
-        "}"].join('\n'),
-      attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord", "aTileIndex" ],
-      uniformNames: ["uLightingDirection", "uMVMatrix", "uPMatrix", "uSampler", "uLightColor", "uAmbientColor", "uFogColor", "uFogDensity" ],
-      textureUniformNames: [ "uSampler" ],
-      pMatrixUniformName: "uPMatrix",
-      mvMatrixUniformName: "uMVMatrix",
-      bindMaterial: function(material) {
-        // HACK: Should have a cleaner way to do this
-        // Arguably some of these are scene based variables not material,
-        // should we pass scene details in?
-        // Or just add sceneLighting property to material
-        this.setUniformVector3("uLightingDirection", material.lightDir);
-        this.setUniformVector3("uLightColor", material.lightColor);
-        this.setUniformVector3("uAmbientColor", material.ambientColor);
-        this.setUniformVector3("uFogColor", material.fogColor);
-        this.setUniformFloat("uFogDensity", material.fogDensity);
+				"uniform vec3 uLightingDirection;",
+				"uniform mat4 uMVMatrix;",
+				"uniform mat4 uPMatrix;",
 
-        this.enableAttribute("aLightingDirection");
-        this.enableAttribute("aVertexPosition");
-        this.enableAttribute("aTextureCoord");
-        this.enableAttribute("aVertexNormal");
-        this.enableAttribute("aTileIndex");
-      },
-      bindBuffers: function(mesh) {
-        this.setAttribute("aVertexPosition", mesh.vertexBuffer);
-        this.setAttribute("aTextureCoord", mesh.textureBuffer);
-        this.setAttribute("aVertexNormal", mesh.normalBuffer);
-        this.setAttribute("aTileIndex", mesh.tileBuffer);
-        this.setIndexedAttribute(mesh.indexBuffer);
-      }
-    };
+				// "out vec4 vWorldPosition;",
+				"out vec2 vTextureCoord;",
+				"out vec3 vNormal;",
+				"out vec3 vViewSpacePosition;",
+				"out float vLightWeight;",
+				"out float vTileIndex;",
 
-  return exports;
+				"void main(void) {",
+					"gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+					"vTextureCoord = aTextureCoord;",
+					"vNormal = aVertexNormal;",
+					"vTileIndex = aTileIndex;",
+
+					// Greedy Meshing - UV generation - artifacts at seams
+					// Normally would mulitply this by the world / model matrix but as models
+					// are all axis aligned and we're going to be using frac value anyway, it's unnecessary
+					// "vWorldPosition = vec4(aVertexPosition + vec3(0.5, 0.5, 0.5), 1.0);",
+
+					// Lighting Direction: vec3(-1.0,2.0,1.0)
+
+					"vLightWeight = 0.5 * max(dot(aVertexNormal, normalize(uLightingDirection)), 0.0);",
+
+					"vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+				"}"].join('\n'),
+			fsSource: [
+				"#version 300 es",
+				"precision highp float;",
+				"precision highp sampler2DArray;",
+
+				"in vec2 vTextureCoord;",
+				//"in vec4 vWorldPosition;",
+				"in vec3 vNormal;",
+				"in vec3 vViewSpacePosition;",
+				"in float vLightWeight;",
+				"in float vTileIndex;",
+
+				"uniform sampler2DArray uSampler;",
+				"uniform vec3 uLightColor;",
+				"uniform vec3 uAmbientColor;",
+
+				"uniform vec3 uFogColor;",
+				"uniform float uFogDensity;",
+
+				"out vec4 fragColor;",
+
+				"void main(void) {",
+						//"vec3 pos = fract(vWorldPosition.xyz);",
+
+						//"vec2 uv = abs(vNormal.x) * pos.zy + abs(vNormal.y) * pos.xz + abs(vNormal.z) * pos.xy;",
+						//"float tileIndex = 8.0 - floor(vTextureCoord.s);",
+
+						"vec4 color = texture(uSampler, vec3(vTextureCoord, vTileIndex));",
+						"vec4 litColor = vec4(((0.5 * uAmbientColor) + (vLightWeight * uLightColor)) * color.rgb, color.a);",
+
+						"#define LOG2 1.442695",
+
+						"float fogDistance = length(vViewSpacePosition);",
+						"float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
+						"fogAmount = clamp(fogAmount, 0.0, 1.0);",
+
+						"fragColor = mix(litColor, vec4(uFogColor, 1.0), fogAmount);",
+				"}"].join('\n'),
+			attributeNames: [ "aVertexPosition", "aVertexNormal", "aTextureCoord", "aTileIndex" ],
+			uniformNames: ["uLightingDirection", "uMVMatrix", "uPMatrix", "uSampler", "uLightColor", "uAmbientColor", "uFogColor", "uFogDensity" ],
+			textureUniformNames: [ "uSampler" ],
+			pMatrixUniformName: "uPMatrix",
+			mvMatrixUniformName: "uMVMatrix",
+			bindMaterial: function(material) {
+				// HACK: Should have a cleaner way to do this
+				// Arguably some of these are scene based variables not material,
+				// should we pass scene details in?
+				// Or just add sceneLighting property to material
+				this.setUniformVector3("uLightingDirection", material.lightDir);
+				this.setUniformVector3("uLightColor", material.lightColor);
+				this.setUniformVector3("uAmbientColor", material.ambientColor);
+				this.setUniformVector3("uFogColor", material.fogColor);
+				this.setUniformFloat("uFogDensity", material.fogDensity);
+
+				this.enableAttribute("aLightingDirection");
+				this.enableAttribute("aVertexPosition");
+				this.enableAttribute("aTextureCoord");
+				this.enableAttribute("aVertexNormal");
+				this.enableAttribute("aTileIndex");
+			},
+			bindBuffers: function(mesh) {
+				this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+				this.setAttribute("aTextureCoord", mesh.textureBuffer);
+				this.setAttribute("aVertexNormal", mesh.normalBuffer);
+				this.setAttribute("aTileIndex", mesh.tileBuffer);
+				this.setIndexedAttribute(mesh.indexBuffer);
+			}
+		};
+
+	return exports;
 })();
 
 },{"../../Fury/src/fury.js":4}],24:[function(require,module,exports){
@@ -3769,187 +3864,213 @@ let vec3 = Fury.Maths.vec3;
 // arguably should split those out into separate modules
 
 let WorldVisuals = module.exports = (function() {
-  let exports = {};
+	let exports = {};
 
-  let atlasMaterial, debugMaterial;
-  let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
-  let coreMesh;
+	let atlasMaterial, debugMaterial;
+	let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
+	let redCoreMesh, blueCoreMesh, yellowCoreMesh, greenCoreMesh;
 
-  let chunkObjects = [];
+	let chunkObjects = [];
 
-  exports.init = (callback) => {
-    // TODO: have an asset loader with a combined callback once done
-    // Use Hestia as inspiration, it had a much better system
-    let itemsToLoad = 2;
-    let loadCallback = () => {
-      itemsToLoad -= 1;
-      if (itemsToLoad == 0) {
-        callback();
-      }
-    };
+	exports.init = (callback) => {
+		// Shader.create requires Fury to be initialised (i.e. it needs a gl context)
+		// So this init needs to be called after Fury.init
 
-    // Placeholder core visuals
-    coreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
-    let glowShader = Fury.Shader.create(Shaders.ColorFog);
-    let fogColor = vec3.create();
-    let glowShaderFogDensity = 0.1;  // Also set in player-visuals.js
+		// TODO: have an asset loader with a combined callback once done
+		// Use Hestia as inspiration, it had a much better system
+		let itemsToLoad = 0;
+		let loadCallback = () => {
+			itemsToLoad -= 1;
+			if (itemsToLoad == 0) {
+				callback();
+			}
+		};
 
-    // TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
-    redMaterial = Fury.Material.create({ shader: glowShader });
-    redMaterial.color = vec3.fromValues(0.9, 0, 0.1);
-    redMaterial.fogColor = fogColor;
-    redMaterial.fogDensity = glowShaderFogDensity;
-    blueMaterial = Fury.Material.create({ shader: glowShader });
-    blueMaterial.color = vec3.fromValues(0, 0.7, 0.9);
-    blueMaterial.fogColor = fogColor;
-    blueMaterial.fogDensity = glowShaderFogDensity;
-    yellowMaterial = Fury.Material.create({ shader: glowShader });
-    yellowMaterial.color = vec3.fromValues(0.9, 0.9, 0);
-    yellowMaterial.fogColor = fogColor;
-    yellowMaterial.fogDensity = glowShaderFogDensity;
-    greenMaterial = Fury.Material.create({ shader: glowShader });
-    greenMaterial.color = vec3.fromValues(0.1, 0.9, 0);
-    greenMaterial.fogColor = fogColor;
-    greenMaterial.fogDensity = glowShaderFogDensity;
+		let fogColor = vec3.fromValues(0,0,0.01);
+		let glowShaderFogDensity = 0.1;  // Also set in player-visuals.js
 
-    // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
-    // So this init needs to be called after Fury.init
-    atlasMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.Voxel) });
-    atlasMaterial.loadTexture = (src, cb) => {
-      let image = new Image();
-      image.onload = () => {
-        let texture = Fury.Renderer.createTextureArray(image, 64, 64, 13, "pixel", true); // "low"/"pixel" quality depending on if going purposefully low res
-        // TODO: 13 is based on vorld config, so should actually base it off that
-      	atlasMaterial.textures["uSampler"] = texture;
-      	atlasMaterial.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1
-      	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
-      	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
-      	atlasMaterial.fogColor = fogColor;
-      	atlasMaterial.fogDensity = 0.125;  // TODO: Expose Variables for tweaking please
-        cb();
-      };
-      image.src = src;
-    };
+		let applyLightingInfo = function(material) {
+			material.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1
+			material.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
+			material.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
+			material.fogColor = fogColor;
+			material.fogDensity = 0.125;
+		}
 
-    debugMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
-    debugMaterial.loadTexture = (src, cb) => {
-      let image = new Image();
-      image.onload = () => {
-        debugMaterial.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
-        cb();
-      };
-      image.src = src;
-    };
+		// Placeholder core visuals
+		yellowCoreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
+		let coreShader = Fury.Shader.create(Shaders.LitVertexColor);
+		let glowShader = Fury.Shader.create(Shaders.ColorFog);
 
-    atlasMaterial.loadTexture("./images/atlas_array.png", loadCallback);
-    debugMaterial.loadTexture("./images/checkerboard.png", loadCallback);
-  };
+		// TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
+		redMaterial = Fury.Material.create({ shader: coreShader });
+		redMaterial.reducedFogDensity = glowShaderFogDensity;
+		applyLightingInfo(redMaterial);
+		blueMaterial = Fury.Material.create({ shader: coreShader });
+		blueMaterial.reducedFogDensity = glowShaderFogDensity;
+		applyLightingInfo(blueMaterial);
+		yellowMaterial = Fury.Material.create({ shader: coreShader });
+		yellowMaterial.reducedFogDensity = glowShaderFogDensity;
+		applyLightingInfo(yellowMaterial);
+		greenMaterial = Fury.Material.create({ shader: coreShader });
+		greenMaterial.reducedFogDensity = glowShaderFogDensity;
+		applyLightingInfo(greenMaterial);
 
-  exports.generateVisuals = (world, scene, callback) => {
-    // Debug meshes
-    let boxes = world.boxes;
-    for (let i = 0, l = boxes.length; i < l; i++) {
-      let box = boxes[i];
-      let meshData = Primitives.createCuboidMesh(box.size[0], box.size[1], box.size[2]);
-      let mesh = Fury.Mesh.create(meshData);
-      // TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
-      box.visuals = scene.add({
-        mesh: mesh,
-        position: box.center,
-        static: true,
-        material: debugMaterial
-      });
-    }
+		atlasMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.Voxel) });
+		atlasMaterial.loadTexture = (src, cb) => {
+			let image = new Image();
+			image.onload = () => {
+				let texture = Fury.Renderer.createTextureArray(image, 64, 64, 13, "pixel", true); // "low"/"pixel" quality depending on if going purposefully low res
+				// TODO: 13 is based on vorld config, so should actually base it off that
+				atlasMaterial.textures["uSampler"] = texture;
+				applyLightingInfo(atlasMaterial);
+				cb();
+			};
+			image.src = src;
+		};
 
-    let createCore = function(material, pickup) {
-      // TODO: Add a rotator and a bob component
-      return scene.add({
-        mesh: coreMesh,
-        material: material,
-        position: pickup.position,
-        rotation: pickup.rotation
-      });
-    };
+		debugMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitTextured) });
+		debugMaterial.loadTexture = (src, cb) => {
+			let image = new Image();
+			image.onload = () => {
+				debugMaterial.textures["uSampler"] = Fury.Renderer.createTexture(image, "high");
+				cb();
+			};
+			image.src = src;
+		};
 
-    // Create teleporter Visuals
-    let teleporters = world.teleporters;
-    for (let i = 0, l = teleporters.length; i < l; i++) {
-      let teleporter = teleporters[i];
-      teleporter.visual = TeleporterVisuals.create({ teleporter: teleporter });
-    }
+		itemsToLoad += 1;
+		Fury.Model.load("./models/red_core.gltf", (model) => {
+			redCoreMesh = Fury.Mesh.create(model.meshData[0]);
+			loadCallback();
+		});
+		itemsToLoad += 1;
+		Fury.Model.load("./models/blue_core.gltf", (model) => {
+			blueCoreMesh = Fury.Mesh.create(model.meshData[0]);
+			loadCallback();
+		});
+		itemsToLoad += 1;
+		Fury.Model.load("./models/yellow_core.gltf", (model) => {
+			yellowCoreMesh = Fury.Mesh.create(model.meshData[0]);
+			loadCallback();
+		});
+		itemsToLoad += 1;
+		Fury.Model.load("./models/green_core.gltf", (model) => {
+			greenCoreMesh = Fury.Mesh.create(model.meshData[0]);
+			loadCallback();
+		});
 
-    // Create Pickup Visuals
-    let pickups = world.pickups;
-    for (let i = 0, l = pickups.length; i < l; i++) {
-      let pickup = pickups[i];
-      switch(pickup.visualId) {
-        case Pickup.visualIds.REDCORE:
-          pickup.visual = createCore(redMaterial, pickup);
-          break;
-        case Pickup.visualIds.BLUECORE:
-          pickup.visual = createCore(blueMaterial, pickup);
-          break;
-        case Pickup.visualIds.YELLOWCORE:
-          pickup.visual = createCore(yellowMaterial, pickup);
-          break;
-        case Pickup.visualIds.GREENCORE:
-          pickup.visual = createCore(greenMaterial, pickup);
-          break;
-      }
+		itemsToLoad += 1;
+		atlasMaterial.loadTexture("./images/atlas_array.png", loadCallback);
+		itemsToLoad += 1;
+		debugMaterial.loadTexture("./images/checkerboard.png", loadCallback);
+	};
 
-      // Create Interactable Visuals
-      let interactables = world.interactables;
-      for (let i = 0, l = interactables.length; i < l; i++) {
-        let interactable = interactables[i];
-        switch(interactable.type) {
-          case Interactable.Type.TELEPORTER_CONTROL:
-            interactable.visual = TeleporterControlVisuals.create({
-              interactable: interactable
-            });
-            break;
-        }
-      }
-    }
+	exports.generateVisuals = (world, scene, callback) => {
+		// Debug meshes
+		let boxes = world.boxes;
+		for (let i = 0, l = boxes.length; i < l; i++) {
+			let box = boxes[i];
+			let meshData = Primitives.createCuboidMesh(box.size[0], box.size[1], box.size[2]);
+			let mesh = Fury.Mesh.create(meshData);
+			// TODO: World should in charge of including some id for visuals which lets client know what materials etc to use
+			box.visuals = scene.add({
+				mesh: mesh,
+				position: box.center,
+				static: true,
+				material: debugMaterial
+			});
+		}
 
-    let vorld = world.vorld;
-    if (!vorld) {
-      return;
-    }
+		let createCore = function(mesh, material, pickup) {
+			// TODO: Add a rotator and a bob component
+			return scene.add({
+				mesh: mesh,
+				material: material,
+				position: pickup.position,
+				rotation: pickup.rotation
+			});
+		};
 
-    // "Generating Meshes"
-    // $("#progressBarInner").width("0%");
+		// Create teleporter Visuals
+		let teleporters = world.teleporters;
+		for (let i = 0, l = teleporters.length; i < l; i++) {
+			let teleporter = teleporters[i];
+			teleporter.visual = TeleporterVisuals.create({ teleporter: teleporter });
+		}
 
-  	var worker = new Worker('./scripts/mesher-worker.js');
-  	worker.onmessage = function(e) {
-  		if (e.data.mesh) {
-  			var mesh = Fury.Mesh.create(e.data.mesh);
-  			mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
-        // ^^ TODO: have some way of attaching additional generic buffer info into
-        // mesh data, so we don't have to do this step manually
-  			var chunkObject = scene.add({
-          static: true,
-          mesh: mesh,
-          material: atlasMaterial,
-          position: vec3.clone(e.data.offset)
-        });
-  			chunkObjects.push(chunkObject);
-  		}
-  		if (e.data.progress !== undefined) {
-  			// $("#progressBarInner").width((e.data.progress * 100) + "%");
-  		}
-  		if (e.data.complete) {
-  			// $("#progressDisplay").hide();
-        if (callback) {
-            callback();
-        }
-  		}
-  	};
-  	worker.postMessage({
-  		chunkData: vorld
-  	});
-  };
+		// Create Pickup Visuals
+		let pickups = world.pickups;
+		for (let i = 0, l = pickups.length; i < l; i++) {
+			let pickup = pickups[i];
+			switch(pickup.visualId) {
+				case Pickup.visualIds.REDCORE:
+					pickup.visual = createCore(redCoreMesh, redMaterial, pickup);
+					break;
+				case Pickup.visualIds.BLUECORE:
+					pickup.visual = createCore(blueCoreMesh, blueMaterial, pickup);
+					break;
+				case Pickup.visualIds.YELLOWCORE:
+					pickup.visual = createCore(yellowCoreMesh, yellowMaterial, pickup);
+					break;
+				case Pickup.visualIds.GREENCORE:
+					pickup.visual = createCore(greenCoreMesh, greenMaterial, pickup);
+					break;
+			}
 
-  return exports;
+			// Create Interactable Visuals
+			let interactables = world.interactables;
+			for (let i = 0, l = interactables.length; i < l; i++) {
+				let interactable = interactables[i];
+				switch(interactable.type) {
+					case Interactable.Type.TELEPORTER_CONTROL:
+						interactable.visual = TeleporterControlVisuals.create({
+							interactable: interactable
+						});
+						break;
+				}
+			}
+		}
+
+		let vorld = world.vorld;
+		if (!vorld) {
+			return;
+		}
+
+		// "Generating Meshes"
+		// $("#progressBarInner").width("0%");
+
+		var worker = new Worker('./scripts/mesher-worker.js');
+		worker.onmessage = function(e) {
+			if (e.data.mesh) {
+				var mesh = Fury.Mesh.create(e.data.mesh);
+				mesh.tileBuffer = Fury.Renderer.createBuffer(e.data.mesh.tileIndices, 1);
+				// ^^ TODO: have some way of attaching additional generic buffer info into
+				// mesh data, so we don't have to do this step manually
+				var chunkObject = scene.add({
+					static: true,
+					mesh: mesh,
+					material: atlasMaterial,
+					position: vec3.clone(e.data.offset)
+				});
+				chunkObjects.push(chunkObject);
+			}
+			if (e.data.progress !== undefined) {
+				// $("#progressBarInner").width((e.data.progress * 100) + "%");
+			}
+			if (e.data.complete) {
+				// $("#progressDisplay").hide();
+				if (callback) {
+						callback();
+				}
+			}
+		};
+		worker.postMessage({
+			chunkData: vorld
+		});
+	};
+
+	return exports;
 })();
 
 },{"../../Fury/src/fury.js":4,"../common/interactable":28,"../common/pickup":30,"./primitives":22,"./shaders":23,"./visuals/teleporter-control-visuals":24,"./visuals/teleporter-visuals":25}],27:[function(require,module,exports){
@@ -4035,6 +4156,7 @@ let GameServer = module.exports = (function() {
           for (let i = 0, l = world.pickups.length; i < l; i++) {
             let pickup = world.pickups[i];
             if (pickup.canPickup(message.position)) {
+              // TODO: just cache and compare against distance then pikcup the closest
               // This player should pickup the object!
               pickup.enabled = false;
               setPickupGlobalState(pickup.id, id);
@@ -4114,9 +4236,7 @@ let GameServer = module.exports = (function() {
               Maths.vec3.copy(message.position, teleporter.targetPosition);
               Maths.quat.copy(message.rotation, teleporter.targetRotation);
               message.snapLook = true;
-              if (teleporter.win) {
-                message.win = true;
-              }
+              message.win = teleporter.win;
               break;
             }
           }
@@ -4931,6 +5051,7 @@ let World = module.exports = (function() {
         teleporter: teleporter,
         powerRequirements: powerRequirements
       });
+      teleporter.controls.push(control);
       world.interactables.push(control);
     };
 
