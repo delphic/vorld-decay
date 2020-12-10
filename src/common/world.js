@@ -1,4 +1,4 @@
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
 let vec3 = Maths.vec3, quat = Maths.quat;

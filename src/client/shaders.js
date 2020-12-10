@@ -1,4 +1,4 @@
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 
 var Shaders = module.exports = (function() {
   var exports = {};

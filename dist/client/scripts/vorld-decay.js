@@ -2230,7 +2230,7 @@ window.onload = (event) => {
 
 },{"./client/connection":18,"./client/game-client":19,"./common/game-server":27,"./common/websocket-close-codes":34}],17:[function(require,module,exports){
 // Character Controller handles physics and movement for characters (players)
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
 let Physics = Fury.Physics;
 let Maths = Fury.Maths;
@@ -2564,7 +2564,7 @@ var CharacterController = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/vorld/vorld.js":33}],18:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"../common/vorld/vorld.js":33}],18:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2649,7 +2649,7 @@ var Connection = module.exports = (function() {
 
 },{}],19:[function(require,module,exports){
 let MessageType = require('../common/message-types');
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Player = require('./player');
 let PlayerVisuals = require('./player-visuals');
 let WorldVisuals = require('./world-visuals');
@@ -2992,8 +2992,8 @@ let GameClient = module.exports = (function(){
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":29,"../common/world":35,"./player":21,"./player-visuals":20,"./world-visuals":26}],20:[function(require,module,exports){
-let Fury = require('../../fury/src/fury.js');
+},{"../../Fury/src/fury.js":4,"../common/message-types":29,"../common/world":35,"./player":21,"./player-visuals":20,"./world-visuals":26}],20:[function(require,module,exports){
+let Fury = require('../../Fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
 let Player = require('./player');
@@ -3027,7 +3027,7 @@ let PlayerVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./player":21,"./primitives":22,"./shaders":23}],21:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"./player":21,"./primitives":22,"./shaders":23}],21:[function(require,module,exports){
 // Client side player
 // Handles both local player and replicas
 // Handles input and movement
@@ -3039,7 +3039,7 @@ let PlayerVisuals = module.exports = (function() {
 // However deals with input, so would probably need to be split into
 // player controller + player in order to move to common
 
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let MessageType = require('../common/message-types');
 
 let Maths = Fury.Maths;
@@ -3318,9 +3318,9 @@ let Player = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/message-types":29,"./character-controller":17}],22:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"../common/message-types":29,"./character-controller":17}],22:[function(require,module,exports){
 // Helper for creating mesh primitives
-let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
+let Fury = require('../../Fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
 var Primitives = module.exports = (function() {
   var exports = {};
@@ -3425,8 +3425,8 @@ var Primitives = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],23:[function(require,module,exports){
-let Fury = require('../../fury/src/fury.js');
+},{"../../Fury/src/fury.js":4}],23:[function(require,module,exports){
+let Fury = require('../../Fury/src/fury.js');
 
 var Shaders = module.exports = (function() {
   var exports = {};
@@ -3677,7 +3677,7 @@ var Shaders = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4}],24:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4}],24:[function(require,module,exports){
 
 let TeleporterControlVisuals = module.exports = (function() {
   let exports = {};
@@ -3753,7 +3753,7 @@ let TeleporterVisuals = module.exports = (function() {
 })();
 
 },{}],26:[function(require,module,exports){
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');
@@ -3952,7 +3952,7 @@ let WorldVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"../common/interactable":28,"../common/pickup":30,"./primitives":22,"./shaders":23,"./visuals/teleporter-control-visuals":24,"./visuals/teleporter-visuals":25}],27:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"../common/interactable":28,"../common/pickup":30,"./primitives":22,"./shaders":23,"./visuals/teleporter-control-visuals":24,"./visuals/teleporter-visuals":25}],27:[function(require,module,exports){
 // Game Server!
 // Handles the greet / acknoledge
 // informing the gameclient of their player id and any required on connection state
@@ -3960,8 +3960,8 @@ let WorldVisuals = module.exports = (function() {
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
 let World = require('./world');
-let Bounds = require('../../fury/src/bounds');
-let Maths = require('../../fury/src/maths');
+let Bounds = require('../../Fury/src/bounds');
+let Maths = require('../../Fury/src/maths');
 
 let GameServer = module.exports = (function() {
   let exports = {};
@@ -4236,11 +4236,11 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8,"./message-types":29,"./world":35}],28:[function(require,module,exports){
+},{"../../Fury/src/bounds":2,"../../Fury/src/maths":8,"./message-types":29,"./world":35}],28:[function(require,module,exports){
 // A static world object which can be interacted with in some way
 // This might be better described as a static trigger (with pickup being a dynamic trigger)
-let Maths = require('../../fury/src/maths');
-let Bounds = require('../../fury/src/bounds');
+let Maths = require('../../Fury/src/maths');
+let Bounds = require('../../Fury/src/bounds');
 let quat = Maths.quat, vec3 = Maths.vec3;
 
 let Interactable = module.exports = (function() {
@@ -4393,7 +4393,7 @@ let Interactable = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/bounds":2,"../../fury/src/maths":8}],29:[function(require,module,exports){
+},{"../../Fury/src/bounds":2,"../../Fury/src/maths":8}],29:[function(require,module,exports){
 // message type enum
 var MessageType = module.exports = {
   CONNECTED: "connected",
@@ -4415,8 +4415,8 @@ var MessageType = module.exports = {
 // I've conflated the pickup trigger with the pickup object, might want
 // separate these at some point :shrug:
 
-let Maths = require('../../fury/src/maths');
-let Physics = require('../../fury/src/physics');
+let Maths = require('../../Fury/src/maths');
+let Physics = require('../../Fury/src/physics');
 let vec3 = Maths.vec3, quat = Maths.quat;
 
 let Pickup = module.exports = (function() {
@@ -4484,7 +4484,7 @@ let Pickup = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/maths":8,"../../fury/src/physics":11}],31:[function(require,module,exports){
+},{"../../Fury/src/maths":8,"../../Fury/src/physics":11}],31:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {
@@ -4788,7 +4788,7 @@ module.exports = (function() {
 })();
 
 },{}],35:[function(require,module,exports){
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
 let vec3 = Maths.vec3, quat = Maths.quat;
@@ -5029,4 +5029,4 @@ let World = module.exports = (function() {
   return exports;
 })();
 
-},{"../../fury/src/fury.js":4,"./interactable":28,"./pickup":30,"./vorld/config":32,"./vorld/vorld":33}]},{},[16]);
+},{"../../Fury/src/fury.js":4,"./interactable":28,"./pickup":30,"./vorld/config":32,"./vorld/vorld":33}]},{},[16]);

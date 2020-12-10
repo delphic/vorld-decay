@@ -1,4 +1,4 @@
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
 let Pickup = require('../common/pickup');

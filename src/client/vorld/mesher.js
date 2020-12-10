@@ -1,7 +1,7 @@
 let VorldConfig = require('../../common/vorld/config');
 let Vorld = require('../../common/vorld/vorld');
 let Chunk = require('../../common/vorld/chunk');
-let Maths = require('../../../fury/src/maths');
+let Maths = require('../../../Fury/src/maths');
 let quat = Maths.quat, vec3 = Maths.vec3;
 
 var Mesher = module.exports = (function() {

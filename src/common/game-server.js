@@ -5,8 +5,8 @@
 // Also handles everything else we want to be server authoritative, e.g. level generation
 let MessageType = require('./message-types');
 let World = require('./world');
-let Bounds = require('../../fury/src/bounds');
-let Maths = require('../../fury/src/maths');
+let Bounds = require('../../Fury/src/bounds');
+let Maths = require('../../Fury/src/maths');
 
 let GameServer = module.exports = (function() {
   let exports = {};

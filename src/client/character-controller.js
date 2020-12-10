@@ -1,5 +1,5 @@
 // Character Controller handles physics and movement for characters (players)
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
 let Physics = Fury.Physics;
 let Maths = Fury.Maths;

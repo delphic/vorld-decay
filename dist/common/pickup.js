@@ -6,8 +6,8 @@
 // I've conflated the pickup trigger with the pickup object, might want
 // separate these at some point :shrug:
 
-let Maths = require('../../fury/src/maths');
-let Physics = require('../../fury/src/physics');
+let Maths = require('../../Fury/src/maths');
+let Physics = require('../../Fury/src/physics');
 let vec3 = Maths.vec3, quat = Maths.quat;
 
 let Pickup = module.exports = (function() {

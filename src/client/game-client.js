@@ -1,5 +1,5 @@
 let MessageType = require('../common/message-types');
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Player = require('./player');
 let PlayerVisuals = require('./player-visuals');
 let WorldVisuals = require('./world-visuals');

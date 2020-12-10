@@ -9,7 +9,7 @@
 // However deals with input, so would probably need to be split into
 // player controller + player in order to move to common
 
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let MessageType = require('../common/message-types');
 
 let Maths = Fury.Maths;

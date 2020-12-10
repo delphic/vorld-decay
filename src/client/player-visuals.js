@@ -1,4 +1,4 @@
-let Fury = require('../../fury/src/fury.js');
+let Fury = require('../../Fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
 let Player = require('./player');

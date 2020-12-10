@@ -1,5 +1,5 @@
 // Helper for creating mesh primitives
-let Fury = require('../../fury/src/fury.js'); // Needed for TriangleStrip renderMode
+let Fury = require('../../Fury/src/fury.js'); // Needed for TriangleStrip renderMode
 
 var Primitives = module.exports = (function() {
   var exports = {};

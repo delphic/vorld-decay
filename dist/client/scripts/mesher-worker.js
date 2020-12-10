@@ -150,7 +150,7 @@ onmessage = function(event) {
 let VorldConfig = require('../../common/vorld/config');
 let Vorld = require('../../common/vorld/vorld');
 let Chunk = require('../../common/vorld/chunk');
-let Maths = require('../../../fury/src/maths');
+let Maths = require('../../../Fury/src/maths');
 let quat = Maths.quat, vec3 = Maths.vec3;
 
 var Mesher = module.exports = (function() {
@@ -465,7 +465,7 @@ var Mesher = module.exports = (function() {
 	return exports;
 })();
 
-},{"../../../fury/src/maths":2,"../../common/vorld/chunk":5,"../../common/vorld/config":6,"../../common/vorld/vorld":7}],5:[function(require,module,exports){
+},{"../../../Fury/src/maths":2,"../../common/vorld/chunk":5,"../../common/vorld/config":6,"../../common/vorld/vorld":7}],5:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {

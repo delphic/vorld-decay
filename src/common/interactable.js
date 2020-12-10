@@ -1,7 +1,7 @@
 // A static world object which can be interacted with in some way
 // This might be better described as a static trigger (with pickup being a dynamic trigger)
-let Maths = require('../../fury/src/maths');
-let Bounds = require('../../fury/src/bounds');
+let Maths = require('../../Fury/src/maths');
+let Bounds = require('../../Fury/src/bounds');
 let quat = Maths.quat, vec3 = Maths.vec3;
 
 let Interactable = module.exports = (function() {
