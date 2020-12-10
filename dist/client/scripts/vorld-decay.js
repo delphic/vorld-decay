@@ -2943,6 +2943,7 @@ let Fury = require('../../fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
 let Player = require('./player');
+let vec3 = Fury.Maths.vec3;
 
 let PlayerVisuals = module.exports = (function() {
   let exports = {};
@@ -2951,8 +2952,10 @@ let PlayerVisuals = module.exports = (function() {
   let playerMesh, playerMaterial;
 
   exports.init = () => {
-    playerMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.UnlitColor) });
-    playerMaterial.color = [ 1.0, 0.0, 0.3 ];
+    playerMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.ColorFog) });
+    playerMaterial.color = vec3.fromValues(1.0, 0.0, 0.3);
+    playerMaterial.fogColor = vec3.create();
+    playerMaterial.fogDensity = 0.1; // TODO: coordinate with worldvisuals
     // Should we save creating the mesh until we know the player proportions?
     playerMesh = Fury.Mesh.create(Primitives.createCuboidMesh(0.75 * Player.size[0], Player.size[1], 0.75 * Player.size[2]));
   };
@@ -3448,6 +3451,67 @@ var Shaders = module.exports = (function() {
    	 }
    };
 
+  exports.ColorFog = {  // UnlitColor but with fog!
+      vsSource: [
+        "#version 300 es",
+        "in vec3 aVertexPosition;",
+
+        "uniform mat4 uMVMatrix;",
+        "uniform mat4 uPMatrix;",
+
+        "out vec3 vViewSpacePosition;",
+
+        "void main(void) {",
+          "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+
+          "vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+        "}"].join('\n'),
+      fsSource: [
+        "#version 300 es",
+        "precision highp float;",
+
+        "in vec3 vViewSpacePosition;",
+
+        "uniform vec3 uFogColor;",
+        "uniform float uFogDensity;",
+        "uniform vec3 uColor;",
+
+        "out vec4 fragColor;",
+
+        "void main(void) {",
+
+            "vec4 color = vec4(uColor, 1);",
+
+            "#define LOG2 1.442695",
+
+            "float fogDistance = length(vViewSpacePosition);",
+            "float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
+            "fogAmount = clamp(fogAmount, 0.0, 1.0);",
+
+            "fragColor = mix(color, vec4(uFogColor, 1.0), fogAmount);",
+        "}"].join('\n'),
+      attributeNames: [ "aVertexPosition" ],
+      uniformNames: [ "uMVMatrix", "uPMatrix", "uColor", "uFogColor", "uFogDensity" ],
+      textureUniformNames: [ ],
+      pMatrixUniformName: "uPMatrix",
+      mvMatrixUniformName: "uMVMatrix",
+      bindMaterial: function(material) {
+        // HACK: Should have a cleaner way to do this
+        // Arguably some of these are scene based variables not material,
+        // should we pass scene details in?
+        // Or just add sceneLighting property to material
+        this.setUniformVector3("uFogColor", material.fogColor);
+        this.setUniformFloat("uFogDensity", material.fogDensity);
+        this.setUniformVector3("uColor", material.color);
+
+        this.enableAttribute("aVertexPosition");
+      },
+      bindBuffers: function(mesh) {
+        this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+        this.setIndexedAttribute(mesh.indexBuffer);
+      }
+    };
+
   exports.Voxel = {
       vsSource: [
         "#version 300 es",
@@ -3669,16 +3733,27 @@ let WorldVisuals = module.exports = (function() {
 
     // Placeholder core visuals
     coreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
-    let unlitColorShader = Fury.Shader.create(Shaders.UnlitColor);
+    let glowShader = Fury.Shader.create(Shaders.ColorFog);
+    let fogColor = vec3.create();
+    let glowShaderFogDensity = 0.1;  // Also set in player-visuals.js
+
     // TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
-    redMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial = Fury.Material.create({ shader: glowShader });
     redMaterial.color = vec3.fromValues(0.9, 0, 0.1);
-    blueMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial.fogColor = fogColor;
+    redMaterial.fogDensity = glowShaderFogDensity;
+    blueMaterial = Fury.Material.create({ shader: glowShader });
     blueMaterial.color = vec3.fromValues(0, 0.7, 0.9);
-    yellowMaterial = Fury.Material.create({ shader: unlitColorShader });
+    blueMaterial.fogColor = fogColor;
+    blueMaterial.fogDensity = glowShaderFogDensity;
+    yellowMaterial = Fury.Material.create({ shader: glowShader });
     yellowMaterial.color = vec3.fromValues(0.9, 0.9, 0);
-    greenMaterial = Fury.Material.create({ shader: unlitColorShader });
+    yellowMaterial.fogColor = fogColor;
+    yellowMaterial.fogDensity = glowShaderFogDensity;
+    greenMaterial = Fury.Material.create({ shader: glowShader });
     greenMaterial.color = vec3.fromValues(0.1, 0.9, 0);
+    greenMaterial.fogColor = fogColor;
+    greenMaterial.fogDensity = glowShaderFogDensity;
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
     // So this init needs to be called after Fury.init
@@ -3692,7 +3767,7 @@ let WorldVisuals = module.exports = (function() {
       	atlasMaterial.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1
       	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
       	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
-      	atlasMaterial.fogColor = vec3.fromValues(0, 0, 0);
+      	atlasMaterial.fogColor = fogColor;
       	atlasMaterial.fogDensity = 0.125;  // TODO: Expose Variables for tweaking please
         cb();
       };

@@ -35,16 +35,27 @@ let WorldVisuals = module.exports = (function() {
 
     // Placeholder core visuals
     coreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
-    let unlitColorShader = Fury.Shader.create(Shaders.UnlitColor);
+    let glowShader = Fury.Shader.create(Shaders.ColorFog);
+    let fogColor = vec3.create();
+    let glowShaderFogDensity = 0.1;  // Also set in player-visuals.js
+
     // TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
-    redMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial = Fury.Material.create({ shader: glowShader });
     redMaterial.color = vec3.fromValues(0.9, 0, 0.1);
-    blueMaterial = Fury.Material.create({ shader: unlitColorShader });
+    redMaterial.fogColor = fogColor;
+    redMaterial.fogDensity = glowShaderFogDensity;
+    blueMaterial = Fury.Material.create({ shader: glowShader });
     blueMaterial.color = vec3.fromValues(0, 0.7, 0.9);
-    yellowMaterial = Fury.Material.create({ shader: unlitColorShader });
+    blueMaterial.fogColor = fogColor;
+    blueMaterial.fogDensity = glowShaderFogDensity;
+    yellowMaterial = Fury.Material.create({ shader: glowShader });
     yellowMaterial.color = vec3.fromValues(0.9, 0.9, 0);
-    greenMaterial = Fury.Material.create({ shader: unlitColorShader });
+    yellowMaterial.fogColor = fogColor;
+    yellowMaterial.fogDensity = glowShaderFogDensity;
+    greenMaterial = Fury.Material.create({ shader: glowShader });
     greenMaterial.color = vec3.fromValues(0.1, 0.9, 0);
+    greenMaterial.fogColor = fogColor;
+    greenMaterial.fogDensity = glowShaderFogDensity;
 
     // Shader.create requires Fury to be initialised (i.e. it needs a gl context)
     // So this init needs to be called after Fury.init
@@ -58,7 +69,7 @@ let WorldVisuals = module.exports = (function() {
       	atlasMaterial.lightDir = vec3.fromValues(-1.0, 2.0, 1.0); // Was -1, 2, 1
       	atlasMaterial.lightColor = vec3.fromValues(1.0, 1.0, 1.0);
       	atlasMaterial.ambientColor = vec3.fromValues(0.5, 0.5, 0.5);
-      	atlasMaterial.fogColor = vec3.fromValues(0, 0, 0);
+      	atlasMaterial.fogColor = fogColor;
       	atlasMaterial.fogDensity = 0.125;  // TODO: Expose Variables for tweaking please
         cb();
       };

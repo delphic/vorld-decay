@@ -77,6 +77,67 @@ var Shaders = module.exports = (function() {
    	 }
    };
 
+  exports.ColorFog = {  // UnlitColor but with fog!
+      vsSource: [
+        "#version 300 es",
+        "in vec3 aVertexPosition;",
+
+        "uniform mat4 uMVMatrix;",
+        "uniform mat4 uPMatrix;",
+
+        "out vec3 vViewSpacePosition;",
+
+        "void main(void) {",
+          "gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);",
+
+          "vViewSpacePosition = (uMVMatrix * vec4(aVertexPosition, 1.0)).xyz;",
+        "}"].join('\n'),
+      fsSource: [
+        "#version 300 es",
+        "precision highp float;",
+
+        "in vec3 vViewSpacePosition;",
+
+        "uniform vec3 uFogColor;",
+        "uniform float uFogDensity;",
+        "uniform vec3 uColor;",
+
+        "out vec4 fragColor;",
+
+        "void main(void) {",
+
+            "vec4 color = vec4(uColor, 1);",
+
+            "#define LOG2 1.442695",
+
+            "float fogDistance = length(vViewSpacePosition);",
+            "float fogAmount = 1.0 - exp2(- uFogDensity * uFogDensity * fogDistance * fogDistance * LOG2);",
+            "fogAmount = clamp(fogAmount, 0.0, 1.0);",
+
+            "fragColor = mix(color, vec4(uFogColor, 1.0), fogAmount);",
+        "}"].join('\n'),
+      attributeNames: [ "aVertexPosition" ],
+      uniformNames: [ "uMVMatrix", "uPMatrix", "uColor", "uFogColor", "uFogDensity" ],
+      textureUniformNames: [ ],
+      pMatrixUniformName: "uPMatrix",
+      mvMatrixUniformName: "uMVMatrix",
+      bindMaterial: function(material) {
+        // HACK: Should have a cleaner way to do this
+        // Arguably some of these are scene based variables not material,
+        // should we pass scene details in?
+        // Or just add sceneLighting property to material
+        this.setUniformVector3("uFogColor", material.fogColor);
+        this.setUniformFloat("uFogDensity", material.fogDensity);
+        this.setUniformVector3("uColor", material.color);
+
+        this.enableAttribute("aVertexPosition");
+      },
+      bindBuffers: function(mesh) {
+        this.setAttribute("aVertexPosition", mesh.vertexBuffer);
+        this.setIndexedAttribute(mesh.indexBuffer);
+      }
+    };
+
   exports.Voxel = {
       vsSource: [
         "#version 300 es",
