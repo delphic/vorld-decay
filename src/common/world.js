@@ -174,7 +174,7 @@ let World = module.exports = (function() {
 			level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
 		};
 
-		world.createLevel = (levelName) => {
+		let createNamedLevel = function(levelName) {
 			switch(levelName) {
 				case "debug":
 					// Placeholder level creation
@@ -189,7 +189,6 @@ let World = module.exports = (function() {
 					createRoom(-5,0,-10, 11,5,11);
 					// Note target position should add player y extents as player position
 					// isn't at the bottom of it's box cause we're insane
-					let targetPosition
 					createTeleporterControl(
 						"teleporter_control_1",
 						-2, 0, -10,
@@ -242,6 +241,100 @@ let World = module.exports = (function() {
 						[0,0,0,1] // requires one green core
 					);
 					break;
+			}
+		};
+
+		let buildLevel = function(level) {
+			// Takes input from puzzle-generator and turns it into geometry and objects
+			// Expected Input is a array of rooms with a number of teleporters and cores
+			// Expected Input Test:
+			// rooms: [ { telporters: [{ powerRequirements: [1], isProgression: true }], cores: [ 1 ]  }], start: 0
+
+			let roomOffset = vec3.fromValues(0, 0, 0);
+			let roomHeight = 3;
+			let zPadding = 6;
+			let teleporterControlIndex = 0;
+			let pickupIndex = 0;
+			let pickupIds = [ Pickup.visualIds.REDCORE, Pickup.visualIds.BLUECORE, Pickup.visualIds.YELLOWCORE, Pickup.visualIds.GREENCORE ];
+
+			let exitPosition = vec3.fromValues(-100, 0, 0);
+			let targetRotation = Maths.quatEuler(0, 180, 0);
+
+			for (let i = 0, l = level.rooms.length; i < l; i++) {
+				// Create room sized by number of teleporters it needs for now
+				let teleporters = level.rooms[i].teleporters;
+				let roomWidth = 7 * teleporters.length - 1;
+				let roomDepth = 4 + zPadding;
+				createRoom(roomOffset[0], roomOffset[1], roomOffset[2] - roomDepth, roomWidth, roomHeight, roomDepth);
+
+				// Create Teleporters
+				for (let j = 0, n = teleporters.length; j < n; j++) {
+					let teleportPosition = vec3.fromValues(0,0,1);
+					if (teleporters[j].isProgression) {
+						vec3.copy(teleportPosition, exitPosition);
+					} else {
+						teleportPosition[0] = teleporters[j].target * 100;	// TODO: actually know the position rather than just spacing by 100
+					}
+					let teleporter = createTeleporter(roomOffset[0] + j * 7 + 2, roomOffset[1], roomOffset[2] - roomDepth + 2, teleportPosition, targetRotation);
+
+					// TEMP: HACK only one puzzle
+					if (teleporters[j].isProgression) {
+						teleporter.win = true;
+						teleporter.isProgression = true;
+					}
+
+					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
+						// Create a control panel for each power core type needed
+						if (teleporters[j].powerRequirements[k] > 0) {
+							let controlPower = [0, 0, 0, 0];
+							controlPower[k] = teleporters[j].powerRequirements[k];
+							createTeleporterControl(
+								"teleporter_control_" + (teleporterControlIndex++),
+								roomOffset[0] + j * 7 + 1 + k, roomOffset[1], roomOffset[2] - roomDepth,
+								teleporter,
+								controlPower);
+						}
+					}
+				}
+
+				// Spawn cores for room
+				let cores = level.rooms[i].cores;
+				let coresCount = 0;
+				for (let j = 0, n = cores.length; j < n; j++) {
+					coresCount += cores[j];
+				}
+
+				let xSpacing = roomWidth / (coresCount + 1);
+				let spawnCount = 0;
+				for (let j = 0, n = cores.length; j < n; j++) {
+					for (let k = 0, m = cores[j]; k < m; k++) {
+						createPickup(
+							"core_" + (pickupIndex++),
+							pickupIds[j],
+							roomOffset[0] + xSpacing * (spawnCount + 1),
+							roomOffset[1] + 0.5,
+							roomOffset[2] - (zPadding/2),
+							1.5,
+							false);
+						spawnCount++;
+					}
+				}
+
+				if (level.start == i) {
+					vec3.add(world.initialSpawnPosition, roomOffset, Maths.vec3Y);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth/2);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3Z, -1);
+				}
+
+				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, 100);
+			}
+		};
+
+		world.createLevel = (level) => {
+			if (typeof level == "string") {
+				createNamedLevel(level);
+			} else {
+				buildLevel(level);
 			}
 		};
 

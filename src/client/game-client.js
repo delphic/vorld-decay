@@ -257,7 +257,7 @@ let GameClient = module.exports = (function(){
 		serverState = state;
 
 		// Load world level and instanitate scene visuals
-		var level = world.createLevel(serverState.level);
+		world.createLevel(serverState.level);
 
 		// TODO: Wait for asset load - test with players already connected OR update visual creation to wait for asset load
 		// Add world objects to render scene

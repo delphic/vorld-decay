@@ -7,6 +7,7 @@ let MessageType = require('./message-types');
 let World = require('./world');
 let Bounds = require('../../Fury/src/bounds');
 let Maths = require('../../Fury/src/maths');
+let PuzzleGenerator = require("./puzzle-generator");
 
 let GameServer = module.exports = (function() {
 	let exports = {};
@@ -28,9 +29,10 @@ let GameServer = module.exports = (function() {
 	exports.init = (sendDelegate, distributeDelegate) => {
 		sendMessage = sendDelegate;
 		distributeMessage = distributeDelegate;
-
-		globalState.level = "debug";
-		world.createLevel("debug");
+		/* globalState.level = "debug"; */
+		let level = PuzzleGenerator.create();
+		globalState.level = level;
+		world.createLevel(level);
 	};
 
 	exports.onclientconnect = (id) => {

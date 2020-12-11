@@ -2230,7 +2230,7 @@ window.onload = (event) => {
   });
 };
 
-},{"./client/connection":18,"./client/game-client":19,"./common/game-server":27,"./common/websocket-close-codes":34}],17:[function(require,module,exports){
+},{"./client/connection":18,"./client/game-client":19,"./common/game-server":27,"./common/websocket-close-codes":35}],17:[function(require,module,exports){
 // Character Controller handles physics and movement for characters (players)
 let Fury = require('../../Fury/src/fury.js');
 let Vorld = require('../common/vorld/vorld.js');
@@ -2566,7 +2566,7 @@ var CharacterController = module.exports = (function() {
   return exports;
 })();
 
-},{"../../Fury/src/fury.js":4,"../common/vorld/vorld.js":33}],18:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"../common/vorld/vorld.js":34}],18:[function(require,module,exports){
 // Handles connecting to web socket server
 // and provides messaging methods - but these should rarely be called directly
 // as we may want to be using a local message relay instead
@@ -2909,7 +2909,7 @@ let GameClient = module.exports = (function(){
 		serverState = state;
 
 		// Load world level and instanitate scene visuals
-		var level = world.createLevel(serverState.level);
+		world.createLevel(serverState.level);
 
 		// TODO: Wait for asset load - test with players already connected OR update visual creation to wait for asset load
 		// Add world objects to render scene
@@ -3046,7 +3046,7 @@ let GameClient = module.exports = (function(){
 	return exports;
 })();
 
-},{"../../Fury/src/fury.js":4,"../common/message-types":29,"../common/world":35,"./player":21,"./player-visuals":20,"./world-visuals":26}],20:[function(require,module,exports){
+},{"../../Fury/src/fury.js":4,"../common/message-types":29,"../common/world":36,"./player":21,"./player-visuals":20,"./world-visuals":26}],20:[function(require,module,exports){
 let Fury = require('../../Fury/src/fury.js');
 let Primitives = require('./primitives');
 let Shaders = require('./shaders');
@@ -4257,6 +4257,7 @@ let MessageType = require('./message-types');
 let World = require('./world');
 let Bounds = require('../../Fury/src/bounds');
 let Maths = require('../../Fury/src/maths');
+let PuzzleGenerator = require("./puzzle-generator");
 
 let GameServer = module.exports = (function() {
 	let exports = {};
@@ -4278,9 +4279,10 @@ let GameServer = module.exports = (function() {
 	exports.init = (sendDelegate, distributeDelegate) => {
 		sendMessage = sendDelegate;
 		distributeMessage = distributeDelegate;
-
-		globalState.level = "debug";
-		world.createLevel("debug");
+		/* globalState.level = "debug"; */
+		let level = PuzzleGenerator.create();
+		globalState.level = level;
+		world.createLevel(level);
 	};
 
 	exports.onclientconnect = (id) => {
@@ -4541,7 +4543,7 @@ let GameServer = module.exports = (function() {
 
 })();
 
-},{"../../Fury/src/bounds":2,"../../Fury/src/maths":8,"./message-types":29,"./world":35}],28:[function(require,module,exports){
+},{"../../Fury/src/bounds":2,"../../Fury/src/maths":8,"./message-types":29,"./puzzle-generator":31,"./world":36}],28:[function(require,module,exports){
 // A static world object which can be interacted with in some way
 // This might be better described as a static trigger (with pickup being a dynamic trigger)
 let Maths = require('../../Fury/src/maths');
@@ -4811,6 +4813,103 @@ let Pickup = module.exports = (function() {
 })();
 
 },{"../../Fury/src/maths":8,"../../Fury/src/physics":11}],31:[function(require,module,exports){
+// Right terms!
+// A 'teleporters' transports you from one room to another in one direction, may require a colored 'core' to power
+// A 'core' is an item you can pick up in world (or is powering a teleporter) and take through powered teleporters
+// A 'room' is an area has at least one teleporter, and enough cores to power at least one teleporter
+//  A room is a subset of 'unit' of loop length 0
+// A 'unit' is a loop of 1 or more sub-units and it has an exit teleporter (which may or may not trigger progression)
+// (NOTE: There needn't be enough cores to power all teleporters, just enough to either power the exit _or_ the 'loop' this follows from room definition)
+// - Units don't need to use the same core type for a given 'level' of nesting, but it'll be easier to reason about if they do.
+// Units overlap when they share rooms in their loops.
+// - Overlapping units implicitly have 'shared' cores when the exit teleporter from one unit needs the same color as is needed to leave one overlapping unit into the other.
+// -- If shared core is used this breaks one of the loops traversal to exit the other, this is desirable.
+// When progression is triggered, the spawn position of new players should be set to the target room
+// A certain number of progressions should cause the player(s) to win and reset the server.
+
+let PuzzleGenerator = module.exports = (function() {
+	let exports = {};
+
+	// This outputs a unit with an exit teleporter
+	exports.create = function() {
+		// Note: color indices: [ red, blue, yellow, green ]
+		// Input # 1:
+		// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] units: [] } ],
+		// start: 0 }
+		// is a single room with a red teleporter and red power core (no keyLocation or exitColor => no power requirements)
+		// exiting this room increases progression
+
+		// Input #2
+		// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		// 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets[1,0], units: [0,0,0] } ],
+		// start: 1}
+		// is 3 rooms in a loop using red to tranverse, second room contains a blue/yellow teleporter, third room contains a blue core and first a yellow
+		// exiting the second room via the blue/yellow teleporter increases progression
+
+		// In order to nest units further, need to improve key and exitLocation specification (have to pick a room location ultimately not a unit location)
+			// Can we just use an array? and it uses the nesting depth % units.length
+		// In order to support multiple power cores need we to improve exitPower - can use an array
+			// Also effects keyLocations - we could just do (nesting depth + keyLocationOffsets[colorIndex]) % units.length
+		// In order to share room instances need something more than definition indices, as each implies a new room atm.
+			// Would adding "overlap: unitIndex, unitOverlaps: [0]"	- Work?
+				// Well for this depth yes, but for more nesting no, and it doesn't help us put the keyLocation into the other unit
+					// If we index into room instead of unit, and then build rooms of the overlap... maybe we could place the key in the overlap?
+
+		// NOTE: Logic for when unlock key matches core already in the room from a lower layer, don't need to add it elsewere
+		// E.g. if exitPower for units[1] in Input #2, was [1,1]  we won't need to add the first core (0) anywhere because units[1].units[units[1].exitlocations[0]].exitPower[0] >= units[1].exitPower[0]
+		// where units[1].exitLocations[0] is the room with the exit teleporter, if it was nested we'd need to drill down till we knew the room index
+		// where we're checking [...]exitPower[0] >= units[1].exitPower[0] could swap those 0s as colorIndex and perform the check for all
+
+		// Output #1
+		// rooms: [ { telporters: [{ powerRequirements: [1], isProgression: true }], cores: [ 1 ]  }]
+		// Output #2
+		// rooms: [ { teleporters: [{ powerRequirements: [1], target: 1 }], cores: [ 1, 0, 1 ] },
+	 	//	{ teleporters: [{ powerRequirements: [1], target: 2 }, { powerRequirements: [0, 1, 1], isProgression: true }], cores: [ 1 ] },
+		// { teleporters: [{ powerRequirements: [1], target: 0 }], cores: [ 1, 1 ] }]
+
+		// Enough theory crafting, lets ignore more than one level of nesting code for now
+		// First Test - nesting level 0, length 1
+		let input = { start: 0, units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
+		// TODO: ^^ good to have everything initially but should be able to omit keys and it still work (just assume 0)
+		let roomUnits = [];
+		let output = { start: 0, rooms: [] };
+
+		// Determine which units are rooms
+		for (let i = 0, l = input.units.length; i < l; i++) {
+			if (!input.units[i].units || !input.units[i].length) {
+				input.units[i].index = i;
+				roomUnits.push(input.units[i]);
+			}
+		}
+
+		for (let i = 0, l = roomUnits.length; i < l; i++) {
+			let room = { teleporters: [], cores: [0,0,0,0] };
+
+			// Just add the exit teleporter - either is progression or next room in parent loop
+			let isProgression = input.start == roomUnits[i].index;
+			let teleporter = { powerRequirements: roomUnits[i].exitPower.slice() };
+			if (isProgression) {
+				teleporter.isProgression = true;
+				// Will eventually also need a target for when we chain puzzles together
+			} else {
+				teleporter.target = (i + 1) % l;	// Is this good? Depends on how we build this rooms array! should be the room index of the next room in this unit loop
+			}
+			room.teleporters.push(teleporter);
+			// Just give it the power needed to get out
+			for (let j = 0; j < 4; j++) {
+				room.cores[j] = roomUnits[i].exitPower[j] | 0;
+			}
+			output.rooms.push(room);
+		}
+
+		// No nesting in current input so we're done for now
+		return output;
+	};
+
+	return exports;
+})();
+
+},{}],32:[function(require,module,exports){
 var Chunk = module.exports = (function() {
   var exports = {};
   exports.addBlock = function(chunk, i, j, k, block) {
@@ -4859,7 +4958,7 @@ var Chunk = module.exports = (function() {
   return exports;
 })();
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 // TODO: This should be actual config not a class ?
 var VorldConfig = module.exports = (function() {
   var exports = {};
@@ -4948,7 +5047,7 @@ var VorldConfig = module.exports = (function() {
   return exports;
 })();
 
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 let Chunk = require('./chunk');
 
 let Vorld = module.exports = (function() {
@@ -5101,7 +5200,7 @@ let Vorld = module.exports = (function() {
   return exports;
 })();
 
-},{"./chunk":31}],34:[function(require,module,exports){
+},{"./chunk":32}],35:[function(require,module,exports){
 module.exports = (function() {
   // These codes are used in the close event
   // Permissable values are between 4000 -> 4999
@@ -5113,7 +5212,7 @@ module.exports = (function() {
   return codes;
 })();
 
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 let Fury = require('../../Fury/src/fury.js');
 let Physics = Fury.Physics; // Could *just* import physics and maths
 let Maths = Fury.Maths;
@@ -5290,7 +5389,7 @@ let World = module.exports = (function() {
 			level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
 		};
 
-		world.createLevel = (levelName) => {
+		let createNamedLevel = function(levelName) {
 			switch(levelName) {
 				case "debug":
 					// Placeholder level creation
@@ -5305,7 +5404,6 @@ let World = module.exports = (function() {
 					createRoom(-5,0,-10, 11,5,11);
 					// Note target position should add player y extents as player position
 					// isn't at the bottom of it's box cause we're insane
-					let targetPosition
 					createTeleporterControl(
 						"teleporter_control_1",
 						-2, 0, -10,
@@ -5361,6 +5459,100 @@ let World = module.exports = (function() {
 			}
 		};
 
+		let buildLevel = function(level) {
+			// Takes input from puzzle-generator and turns it into geometry and objects
+			// Expected Input is a array of rooms with a number of teleporters and cores
+			// Expected Input Test:
+			// rooms: [ { telporters: [{ powerRequirements: [1], isProgression: true }], cores: [ 1 ]  }], start: 0
+
+			let roomOffset = vec3.fromValues(0, 0, 0);
+			let roomHeight = 3;
+			let zPadding = 6;
+			let teleporterControlIndex = 0;
+			let pickupIndex = 0;
+			let pickupIds = [ Pickup.visualIds.REDCORE, Pickup.visualIds.BLUECORE, Pickup.visualIds.YELLOWCORE, Pickup.visualIds.GREENCORE ];
+
+			let exitPosition = vec3.fromValues(-100, 0, 0);
+			let targetRotation = Maths.quatEuler(0, 180, 0);
+
+			for (let i = 0, l = level.rooms.length; i < l; i++) {
+				// Create room sized by number of teleporters it needs for now
+				let teleporters = level.rooms[i].teleporters;
+				let roomWidth = 7 * teleporters.length - 1;
+				let roomDepth = 4 + zPadding;
+				createRoom(roomOffset[0], roomOffset[1], roomOffset[2] - roomDepth, roomWidth, roomHeight, roomDepth);
+
+				// Create Teleporters
+				for (let j = 0, n = teleporters.length; j < n; j++) {
+					let teleportPosition = vec3.fromValues(0,0,1);
+					if (teleporters[j].isProgression) {
+						vec3.copy(teleportPosition, exitPosition);
+					} else {
+						teleportPosition[0] = teleporters[j].target * 100;	// TODO: actually know the position rather than just spacing by 100
+					}
+					let teleporter = createTeleporter(roomOffset[0] + j * 7 + 2, roomOffset[1], roomOffset[2] - roomDepth + 2, teleportPosition, targetRotation);
+
+					// TEMP: HACK only one puzzle
+					if (teleporters[j].isProgression) {
+						teleporter.win = true;
+						teleporter.isProgression = true;
+					}
+
+					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
+						// Create a control panel for each power core type needed
+						if (teleporters[j].powerRequirements[k] > 0) {
+							let controlPower = [0, 0, 0, 0];
+							controlPower[k] = teleporters[j].powerRequirements[k];
+							createTeleporterControl(
+								"teleporter_control_" + (teleporterControlIndex++),
+								roomOffset[0] + j * 7 + 1 + k, roomOffset[1], roomOffset[2] - roomDepth,
+								teleporter,
+								controlPower);
+						}
+					}
+				}
+
+				// Spawn cores for room
+				let cores = level.rooms[i].cores;
+				let coresCount = 0;
+				for (let j = 0, n = cores.length; j < n; j++) {
+					coresCount += cores[j];
+				}
+
+				let xSpacing = roomWidth / (coresCount + 1);
+				let spawnCount = 0;
+				for (let j = 0, n = cores.length; j < n; j++) {
+					for (let k = 0, m = cores[j]; k < m; k++) {
+						createPickup(
+							"core_" + (pickupIndex++),
+							pickupIds[j],
+							roomOffset[0] + xSpacing * (spawnCount + 1),
+							roomOffset[1] + 0.5,
+							roomOffset[2] - (zPadding/2),
+							1.5,
+							false);
+						spawnCount++;
+					}
+				}
+
+				if (level.start == i) {
+					vec3.add(world.initialSpawnPosition, roomOffset, Maths.vec3Y);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth/2);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3Z, -1);
+				}
+
+				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, 100);
+			}
+		};
+
+		world.createLevel = (level) => {
+			if (typeof level == "string") {
+				createNamedLevel(level);
+			} else {
+				buildLevel(level);
+			}
+		};
+
 		// TODO: Create spawn methods with listeners
 
 		return world;
@@ -5369,4 +5561,4 @@ let World = module.exports = (function() {
 	return exports;
 })();
 
-},{"../../Fury/src/fury.js":4,"./interactable":28,"./pickup":30,"./vorld/config":32,"./vorld/vorld":33}]},{},[16]);
+},{"../../Fury/src/fury.js":4,"./interactable":28,"./pickup":30,"./vorld/config":33,"./vorld/vorld":34}]},{},[16]);
