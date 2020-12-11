@@ -33,6 +33,9 @@ let GameClient = module.exports = (function(){
   let localPlayer;
   let players = []; // Note currently index != id
 
+	let messageQueue = [];
+	let assetLoadComplete = false;
+
   let serverState = {
     players: [] // Contains id, position, nick
   };
@@ -58,6 +61,13 @@ let GameClient = module.exports = (function(){
     // Start loading required assets
     PlayerVisuals.init();
     WorldVisuals.init(() => {
+			assetLoadComplete = true;
+			if (messageQueue.length > 0) {
+				for(let i = 0, l = messageQueue.length; i < l; i++) {
+					exports.onmessage(messageQueue[i]);
+				}
+				messageQueue.length = 0;
+			}
       lastTime = Date.now();
       window.requestAnimationFrame(loop);
     });
@@ -134,6 +144,12 @@ let GameClient = module.exports = (function(){
   };
 
   exports.onmessage = (message) => {
+		// Wait for initial asset load
+		if (!assetLoadComplete) {
+			messageQueue.push(message);
+			return;
+		}
+
     switch(message.type) {
       case MessageType.ACKNOWLEDGE:
         // NOTE: Will happen post init but not necessarily post asset load
@@ -208,6 +224,7 @@ let GameClient = module.exports = (function(){
     // Load world level and instanitate scene visuals
     var level = world.createLevel(serverState.level);
 
+		// TODO: Wait for asset load - test with players already connected OR update visual creation to wait for asset load
     // Add world objects to render scene
     WorldVisuals.generateVisuals(world, scene, () => {
       // World visuals instanitated - could defer player spawn until this point
