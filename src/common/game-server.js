@@ -137,6 +137,7 @@ let GameServer = module.exports = (function() {
 						} else if (result) {
 							result.enabled = false;
 							setPickupGlobalState(result.id, id);
+							setInteractableGlobalState(interactable.id, interactable.power);
 						}
 
 						// If we expand what interactables can do, e.g. just switches
