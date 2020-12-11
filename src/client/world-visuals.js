@@ -17,6 +17,9 @@ let WorldVisuals = module.exports = (function() {
 	let exports = {};
 
 	let atlasMaterial, debugMaterial;
+	let useCoreModels = false;
+	// Making assets is taking a looong time, which we dont' have back to colored
+	// cubes but this toggle is here in the unlikely event we get time to come back
 	let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
 	let redCoreMesh, blueCoreMesh, yellowCoreMesh, greenCoreMesh;
 
@@ -47,24 +50,54 @@ let WorldVisuals = module.exports = (function() {
 			material.fogDensity = 0.125;
 		}
 
-		// Placeholder core visuals
-		yellowCoreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
-		let coreShader = Fury.Shader.create(Shaders.LitVertexColor);
-		let glowShader = Fury.Shader.create(Shaders.ColorFog);
+		let createGlowShader = function(shader, color) {
+			let material = Fury.Material.create({ shader: shader });
+			material.color = color;
+			material.fogColor = fogColor;
+			material.fogDensity = glowShaderFogDensity;
+			return material;
+		}
 
+		// Quick mesh used for visual indicators
+		exports.indicatorMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.1));;
+
+		let glowShader = Fury.Shader.create(Shaders.ColorFog);
 		// TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
-		redMaterial = Fury.Material.create({ shader: coreShader });
-		redMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(redMaterial);
-		blueMaterial = Fury.Material.create({ shader: coreShader });
-		blueMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(blueMaterial);
-		yellowMaterial = Fury.Material.create({ shader: coreShader });
-		yellowMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(yellowMaterial);
-		greenMaterial = Fury.Material.create({ shader: coreShader });
-		greenMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(greenMaterial);
+
+		// Placeholder core visuals
+		if (useCoreModels) {
+			let coreShader = Fury.Shader.create(Shaders.LitVertexColor);
+			redMaterial = Fury.Material.create({ shader: coreShader });
+			redMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(redMaterial);
+			blueMaterial = Fury.Material.create({ shader: coreShader });
+			blueMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(blueMaterial);
+			yellowMaterial = Fury.Material.create({ shader: coreShader });
+			yellowMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(yellowMaterial);
+			greenMaterial = Fury.Material.create({ shader: coreShader });
+			greenMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(greenMaterial);
+		} else {
+			let cubeCoreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
+			redCoreMesh = blueCoreMesh = yellowCoreMesh = greenCoreMesh = cubeCoreMesh;
+
+			redMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0, 0.1));
+			exports.redMaterial = redMaterial;
+
+			blueMaterial = createGlowShader(glowShader, vec3.fromValues(0, 0.9, 0.9));
+			exports.blueMaterial = blueMaterial;
+
+			yellowMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0.9, 0));
+			exports.yellowMaterial = yellowMaterial;
+
+			greenMaterial = createGlowShader(glowShader, vec3.fromValues(0, 0.9, 0.1));
+			exports.greenMaterial = greenMaterial;
+		}
+
+		exports.whiteMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0.9, 0.9));
+		exports.blackMaterial = createGlowShader(glowShader, vec3.fromValues(0.1, 0.1, 0.1));
 
 		atlasMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.Voxel) });
 		atlasMaterial.loadTexture = (src, cb) => {
@@ -89,26 +122,28 @@ let WorldVisuals = module.exports = (function() {
 			image.src = src;
 		};
 
-		itemsToLoad += 1;
-		Fury.Model.load("./models/red_core.gltf", (model) => {
-			redCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/blue_core.gltf", (model) => {
-			blueCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/yellow_core.gltf", (model) => {
-			yellowCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/green_core.gltf", (model) => {
-			greenCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
+		if (useCoreModels) {
+			itemsToLoad += 1;
+			Fury.Model.load("./models/red_core.gltf", (model) => {
+				redCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/blue_core.gltf", (model) => {
+				blueCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/yellow_core.gltf", (model) => {
+				yellowCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/green_core.gltf", (model) => {
+				greenCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+		}
 
 		itemsToLoad += 1;
 		atlasMaterial.loadTexture("./images/atlas_array.png", loadCallback);
@@ -146,7 +181,7 @@ let WorldVisuals = module.exports = (function() {
 		let teleporters = world.teleporters;
 		for (let i = 0, l = teleporters.length; i < l; i++) {
 			let teleporter = teleporters[i];
-			teleporter.visual = TeleporterVisuals.create({ teleporter: teleporter });
+			teleporter.visual = TeleporterVisuals.create({ worldVisuals: exports, scene: scene, teleporter: teleporter });
 		}
 
 		// Create Pickup Visuals
@@ -175,6 +210,8 @@ let WorldVisuals = module.exports = (function() {
 				switch(interactable.type) {
 					case Interactable.Type.TELEPORTER_CONTROL:
 						interactable.visual = TeleporterControlVisuals.create({
+							worldVisuals: exports,
+							scene: scene,
 							interactable: interactable
 						});
 						break;

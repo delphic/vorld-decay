@@ -7,6 +7,15 @@ html, body {
   color: white;
   text-align: center;
 }
+h1 {
+	font-size: 4em;
+}
+a, a:visited {
+	color: #ff0066;
+}
+a:hover {
+	color: #00ff66;
+}
 #fury {
   display: block;
 	width: 100%;

@@ -1,25 +1,59 @@
+let Maths = require('../../../Fury/src/maths');
+let vec3 = Maths.vec3;
 
 let TeleporterVisuals = module.exports = (function() {
-  let exports = {};
-  let prototype = {};
+	let exports = {};
+	let prototype = {};
 
-  exports.create = (params) => {
-    let visuals = Object.create(prototype);
+	let size = exports.size = 3;
 
-    visuals.teleporter = params.teleporter;
-    // TODO: Based on number of controls probably want
-    // set up differently
+	exports.create = (params) => {
+		let WorldVisuals = params.worldVisuals;	// Something funny happening with require can't be bothered to investigate
+		let visuals = Object.create(prototype);
 
-    visuals.onmessage = (message) => {
-      switch (message) {
-        case "powered":
-          // Trigger powered visuals
-          break;
-      }
-    };
+		visuals.teleporter = params.teleporter;
 
-    return visuals;
-  };
+		visuals.indicators = [];
 
-  return exports;
+		let center = vec3.clone(params.teleporter.bounds.center);
+		center[1] = params.teleporter.bounds.min[1];
+
+		let offset = (size / 2) - 0.05;
+		let position = null;
+		let material = params.teleporter.controls.length ? WorldVisuals.blackMaterial : WorldVisuals.whiteMaterial;
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, -offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, -offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, -offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, +offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, +offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, -offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, +offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, +offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		visuals.onmessage = (message) => {
+			switch (message) {
+				case "powered":
+					// Trigger powered visuals
+					for (let i = 0, l = visuals.indicators.length; i < l; i++) {
+						visuals.indicators[i].material = WorldVisuals.whiteMaterial;
+					}
+					break;
+			}
+		};
+
+		return visuals;
+	};
+
+	return exports;
 })();

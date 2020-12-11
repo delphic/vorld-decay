@@ -768,11 +768,13 @@ var Material = module.exports = function(){
 				}
 			}
 		}
+		// TODO: Need to copy other properties for this to be useful could use Object.assign?
 		return copy;
 	};
 
 	return exports;
 }();
+
 },{}],8:[function(require,module,exports){
 // This is a centralised point for importing glMatrix
 // Also provides a helper for globalizing for ease of use
@@ -3791,16 +3793,59 @@ var Shaders = module.exports = (function() {
 })();
 
 },{"../../Fury/src/fury.js":4}],24:[function(require,module,exports){
+let Maths = require('../../../Fury/src/maths');
+let vec3 = Maths.vec3;
 
 let TeleporterControlVisuals = module.exports = (function() {
   let exports = {};
   let prototype =  {};
 
   exports.create = (params) => {
-    // expected: interactable (of type teleporter control)
-    let visuals = Object.create(prototype);
+		let WorldVisuals = params.worldVisuals; // I dont' know what's up with require but it wasn't working so passing it manually :shrug:
+			// expected: interactable (of type teleporter control), scene
+			let visuals = Object.create(prototype);
 
-    visuals.interactable = params.interactable;
+		let interactable = params.interactable;
+		visuals.interactable = interactable;
+
+		// Create indicators of required power type
+		if (interactable.powerRequirements && interactable.powerRequirements.length) {
+			// TODO: Support multiple requirements
+			let colorIndex = 0;
+			for (; colorIndex < interactable.powerRequirements.length; colorIndex++) {
+				if (interactable.powerRequirements[colorIndex] > 0) {
+					break;
+				}
+			}
+
+			let material = null;
+			switch(colorIndex) {
+				case 0:
+					material = WorldVisuals.redMaterial;
+					break;
+				case 1:
+					material = WorldVisuals.blueMaterial;
+					break;
+				case 2:
+					material = WorldVisuals.yellowMaterial;
+					break;
+				case 3:
+					material = WorldVisuals.greenMaterial;
+					break;
+			}
+
+			visuals.indicators = [];
+			let position = vec3.clone(interactable.bounds.min);
+			vec3.add(position, position, Maths.vec3Y);
+			vec3.scaleAndAdd(position, position, Maths.vec3Z, -0.9);
+			vec3.scaleAndAdd(position, position, Maths.vec3X, 0.1);
+
+			visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+			let position2 = vec3.clone(position);
+			vec3.scaleAndAdd(position2, position2, Maths.vec3X, 0.8);
+			visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position2 }));
+		}
 
     visuals.onmessage = (message) => {
         switch(message) {
@@ -3838,34 +3883,68 @@ let TeleporterControlVisuals = module.exports = (function() {
   return exports;
 })();
 
-},{}],25:[function(require,module,exports){
+},{"../../../Fury/src/maths":8}],25:[function(require,module,exports){
+let Maths = require('../../../Fury/src/maths');
+let vec3 = Maths.vec3;
 
 let TeleporterVisuals = module.exports = (function() {
-  let exports = {};
-  let prototype = {};
+	let exports = {};
+	let prototype = {};
 
-  exports.create = (params) => {
-    let visuals = Object.create(prototype);
+	let size = exports.size = 3;
 
-    visuals.teleporter = params.teleporter;
-    // TODO: Based on number of controls probably want
-    // set up differently
+	exports.create = (params) => {
+		let WorldVisuals = params.worldVisuals;	// Something funny happening with require can't be bothered to investigate
+		let visuals = Object.create(prototype);
 
-    visuals.onmessage = (message) => {
-      switch (message) {
-        case "powered":
-          // Trigger powered visuals
-          break;
-      }
-    };
+		visuals.teleporter = params.teleporter;
 
-    return visuals;
-  };
+		visuals.indicators = [];
 
-  return exports;
+		let center = vec3.clone(params.teleporter.bounds.center);
+		center[1] = params.teleporter.bounds.min[1];
+
+		let offset = (size / 2) - 0.05;
+		let position = null;
+		let material = params.teleporter.controls.length ? WorldVisuals.blackMaterial : WorldVisuals.whiteMaterial;
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, -offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, -offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, -offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, +offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, +offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, -offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		position = vec3.create();
+		vec3.scaleAndAdd(position, center, Maths.vec3X, +offset);
+		vec3.scaleAndAdd(position, position, Maths.vec3Z, +offset);
+		visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position }));
+
+		visuals.onmessage = (message) => {
+			switch (message) {
+				case "powered":
+					// Trigger powered visuals
+					for (let i = 0, l = visuals.indicators.length; i < l; i++) {
+						visuals.indicators[i].material = WorldVisuals.whiteMaterial;
+					}
+					break;
+			}
+		};
+
+		return visuals;
+	};
+
+	return exports;
 })();
 
-},{}],26:[function(require,module,exports){
+},{"../../../Fury/src/maths":8}],26:[function(require,module,exports){
 let Fury = require('../../Fury/src/fury.js');
 let Shaders = require('./shaders');
 let Primitives = require('./primitives');
@@ -3885,6 +3964,9 @@ let WorldVisuals = module.exports = (function() {
 	let exports = {};
 
 	let atlasMaterial, debugMaterial;
+	let useCoreModels = false;
+	// Making assets is taking a looong time, which we dont' have back to colored
+	// cubes but this toggle is here in the unlikely event we get time to come back
 	let redMaterial, blueMaterial, yellowMaterial, greenMaterial;
 	let redCoreMesh, blueCoreMesh, yellowCoreMesh, greenCoreMesh;
 
@@ -3915,24 +3997,54 @@ let WorldVisuals = module.exports = (function() {
 			material.fogDensity = 0.125;
 		}
 
-		// Placeholder core visuals
-		yellowCoreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
-		let coreShader = Fury.Shader.create(Shaders.LitVertexColor);
-		let glowShader = Fury.Shader.create(Shaders.ColorFog);
+		let createGlowShader = function(shader, color) {
+			let material = Fury.Material.create({ shader: shader });
+			material.color = color;
+			material.fogColor = fogColor;
+			material.fogDensity = glowShaderFogDensity;
+			return material;
+		}
 
+		// Quick mesh used for visual indicators
+		exports.indicatorMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.1));;
+
+		let glowShader = Fury.Shader.create(Shaders.ColorFog);
 		// TODO: ^^ A cache of created shaders might be a good idea or we're going to be swapping shader programs unnecessarily
-		redMaterial = Fury.Material.create({ shader: coreShader });
-		redMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(redMaterial);
-		blueMaterial = Fury.Material.create({ shader: coreShader });
-		blueMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(blueMaterial);
-		yellowMaterial = Fury.Material.create({ shader: coreShader });
-		yellowMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(yellowMaterial);
-		greenMaterial = Fury.Material.create({ shader: coreShader });
-		greenMaterial.reducedFogDensity = glowShaderFogDensity;
-		applyLightingInfo(greenMaterial);
+
+		// Placeholder core visuals
+		if (useCoreModels) {
+			let coreShader = Fury.Shader.create(Shaders.LitVertexColor);
+			redMaterial = Fury.Material.create({ shader: coreShader });
+			redMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(redMaterial);
+			blueMaterial = Fury.Material.create({ shader: coreShader });
+			blueMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(blueMaterial);
+			yellowMaterial = Fury.Material.create({ shader: coreShader });
+			yellowMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(yellowMaterial);
+			greenMaterial = Fury.Material.create({ shader: coreShader });
+			greenMaterial.reducedFogDensity = glowShaderFogDensity;
+			applyLightingInfo(greenMaterial);
+		} else {
+			let cubeCoreMesh = Fury.Mesh.create(Primitives.createCubeMesh(0.25));
+			redCoreMesh = blueCoreMesh = yellowCoreMesh = greenCoreMesh = cubeCoreMesh;
+
+			redMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0, 0.1));
+			exports.redMaterial = redMaterial;
+
+			blueMaterial = createGlowShader(glowShader, vec3.fromValues(0, 0.9, 0.9));
+			exports.blueMaterial = blueMaterial;
+
+			yellowMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0.9, 0));
+			exports.yellowMaterial = yellowMaterial;
+
+			greenMaterial = createGlowShader(glowShader, vec3.fromValues(0, 0.9, 0.1));
+			exports.greenMaterial = greenMaterial;
+		}
+
+		exports.whiteMaterial = createGlowShader(glowShader, vec3.fromValues(0.9, 0.9, 0.9));
+		exports.blackMaterial = createGlowShader(glowShader, vec3.fromValues(0.1, 0.1, 0.1));
 
 		atlasMaterial = Fury.Material.create({ shader: Fury.Shader.create(Shaders.Voxel) });
 		atlasMaterial.loadTexture = (src, cb) => {
@@ -3957,26 +4069,28 @@ let WorldVisuals = module.exports = (function() {
 			image.src = src;
 		};
 
-		itemsToLoad += 1;
-		Fury.Model.load("./models/red_core.gltf", (model) => {
-			redCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/blue_core.gltf", (model) => {
-			blueCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/yellow_core.gltf", (model) => {
-			yellowCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
-		itemsToLoad += 1;
-		Fury.Model.load("./models/green_core.gltf", (model) => {
-			greenCoreMesh = Fury.Mesh.create(model.meshData[0]);
-			loadCallback();
-		});
+		if (useCoreModels) {
+			itemsToLoad += 1;
+			Fury.Model.load("./models/red_core.gltf", (model) => {
+				redCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/blue_core.gltf", (model) => {
+				blueCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/yellow_core.gltf", (model) => {
+				yellowCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+			itemsToLoad += 1;
+			Fury.Model.load("./models/green_core.gltf", (model) => {
+				greenCoreMesh = Fury.Mesh.create(model.meshData[0]);
+				loadCallback();
+			});
+		}
 
 		itemsToLoad += 1;
 		atlasMaterial.loadTexture("./images/atlas_array.png", loadCallback);
@@ -4014,7 +4128,7 @@ let WorldVisuals = module.exports = (function() {
 		let teleporters = world.teleporters;
 		for (let i = 0, l = teleporters.length; i < l; i++) {
 			let teleporter = teleporters[i];
-			teleporter.visual = TeleporterVisuals.create({ teleporter: teleporter });
+			teleporter.visual = TeleporterVisuals.create({ worldVisuals: exports, scene: scene, teleporter: teleporter });
 		}
 
 		// Create Pickup Visuals
@@ -4043,6 +4157,8 @@ let WorldVisuals = module.exports = (function() {
 				switch(interactable.type) {
 					case Interactable.Type.TELEPORTER_CONTROL:
 						interactable.visual = TeleporterControlVisuals.create({
+							worldVisuals: exports,
+							scene: scene,
 							interactable: interactable
 						});
 						break;
