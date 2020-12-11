@@ -2915,7 +2915,7 @@ let GameClient = module.exports = (function(){
             interactable.power[j] = interactableState.power[j];
           }
           if (interactable.onmessage) {
-            interactable.onmessage("init");
+            interactable.onmessage("init");	// TODO: Should not use event messaging for initialisation, that should be reserved for game events
           }
         }
       }
@@ -4447,7 +4447,7 @@ let Interactable = module.exports = (function() {
     };
 
     let message = (message) => {
-      if (message == "init") {
+      if (message == "init") {	// HACK: Shouldn't use game event messaging for initalisation
         if (interactable.isPowered()) {
           messageTeleporter("control_powered");
         }

@@ -265,7 +265,7 @@ let GameClient = module.exports = (function(){
             interactable.power[j] = interactableState.power[j];
           }
           if (interactable.onmessage) {
-            interactable.onmessage("init");
+            interactable.onmessage("init");	// TODO: Should not use event messaging for initialisation, that should be reserved for game events
           }
         }
       }

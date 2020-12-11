@@ -63,7 +63,7 @@ let Interactable = module.exports = (function() {
     };
 
     let message = (message) => {
-      if (message == "init") {
+      if (message == "init") {	// HACK: Shouldn't use game event messaging for initalisation
         if (interactable.isPowered()) {
           messageTeleporter("control_powered");
         }
