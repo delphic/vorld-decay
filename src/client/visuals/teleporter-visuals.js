@@ -49,6 +49,12 @@ let TeleporterVisuals = module.exports = (function() {
 						visuals.indicators[i].material = WorldVisuals.whiteMaterial;
 					}
 					break;
+				case "unpowered":
+					// Trigger unpowered visuals
+					for (let i = 0, l = visuals.indicators.length; i < l; i++) {
+						visuals.indicators[i].material = WorldVisuals.blackMaterial;
+					}
+					break;
 			}
 		};
 

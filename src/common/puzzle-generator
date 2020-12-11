@@ -1,0 +1,13 @@
+// Right terms!
+// A 'teleporters' transports you from one room to another in one direction, may require a colored 'core' to power
+// A 'core' is an item you can pick up in world (or is powering a teleporter) and take through powered teleporters
+// A 'room' is an area has at least one teleporter, and enough cores to power at least one teleporter
+//  A room is a subset of 'unit' of loop length 0
+// A 'unit' is a loop of 1 or more sub-units and it has an exit teleporter (which may or may not trigger progression)
+// (NOTE: There needn't be enough cores to power all teleporters, just enough to either power the exit _or_ the 'loop' this follows from room definition)
+// - Units don't need to use the same core type for a given 'level' of nesting, but it'll be easier to reason about if they do.
+// Units overlap when they share rooms in their loops.
+// - Overlapping units implicitly have 'shared' cores when the exit teleporter from one unit needs the same color as is needed to leave one overlapping unit into the other.
+// -- If shared core is used this breaks one of the loops traversal to exit the other, this is desirable.
+// When progression is triggered, the spawn position of new players should be set to the target room
+// A certain number of progressions should cause the player(s) to win and reset the server.

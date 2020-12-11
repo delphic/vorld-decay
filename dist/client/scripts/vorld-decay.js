@@ -2662,57 +2662,57 @@ let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
 // Game Client
 // Handles the visuals, local player movement, and interp of remote clients
 let GameClient = module.exports = (function(){
-  let exports = {};
+	let exports = {};
 
-  let glCanvas;
-  let resolutionFactor = 1, cameraRatio = 16 / 9;
-  let camera = Fury.Camera.create({
-    near: 0.1,
-    far: 10000,
-    fov: 1.0472,
-    ratio: cameraRatio,
-    position: vec3.fromValues(0, 2, 3)
-  });
-  camera.targetPosition = vec3.clone(camera.position);
-  camera.playerOffset = vec3.fromValues(0, 1, 0);
-  let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
-  let world = require('../common/world').create();
+	let glCanvas;
+	let resolutionFactor = 1, cameraRatio = 16 / 9;
+	let camera = Fury.Camera.create({
+		near: 0.1,
+		far: 10000,
+		fov: 1.0472,
+		ratio: cameraRatio,
+		position: vec3.fromValues(0, 2, 3)
+	});
+	camera.targetPosition = vec3.clone(camera.position);
+	camera.playerOffset = vec3.fromValues(0, 1, 0);
+	let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
+	let world = require('../common/world').create();
 
-  let localId = -1;
-  let localNick = "";
-  let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
+	let localId = -1;
+	let localNick = "";
+	let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
 
-  let localPlayer;
-  let players = []; // Note currently index != id
+	let localPlayer;
+	let players = []; // Note currently index != id
 
 	let messageQueue = [];
 	let assetLoadComplete = false;
 
-  let serverState = {
-    players: [] // Contains id, position, nick
-  };
+	let serverState = {
+		players: [] // Contains id, position, nick
+	};
 
-  let updateCanvasSize = (event) => {
-  	glCanvas.width = resolutionFactor * glCanvas.clientWidth;
-  	glCanvas.height = resolutionFactor * glCanvas.clientHeight;
-  	cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
-  	if (camera && camera.ratio) camera.ratio = cameraRatio;
-  };
+	let updateCanvasSize = (event) => {
+		glCanvas.width = resolutionFactor * glCanvas.clientWidth;
+		glCanvas.height = resolutionFactor * glCanvas.clientHeight;
+		cameraRatio = glCanvas.clientWidth / glCanvas.clientHeight;
+		if (camera && camera.ratio) camera.ratio = cameraRatio;
+	};
 
-  // TODO: Separate nick setting (i.e. greet response)
-  exports.init = (nick, sendDelegate) => {
-    sendMessage = sendDelegate;
-    localNick = nick;
+	// TODO: Separate nick setting (i.e. greet response)
+	exports.init = (nick, sendDelegate) => {
+		sendMessage = sendDelegate;
+		localNick = nick;
 
-    glCanvas = document.getElementById("fury");
-    window.addEventListener('resize', updateCanvasSize);
-    updateCanvasSize();
+		glCanvas = document.getElementById("fury");
+		window.addEventListener('resize', updateCanvasSize);
+		updateCanvasSize();
 
-    Fury.init("fury"); // Consider { antialias: false }
+		Fury.init("fury"); // Consider { antialias: false }
 
-    // Start loading required assets
-    PlayerVisuals.init();
-    WorldVisuals.init(() => {
+		// Start loading required assets
+		PlayerVisuals.init();
+		WorldVisuals.init(() => {
 			assetLoadComplete = true;
 			if (messageQueue.length > 0) {
 				for(let i = 0, l = messageQueue.length; i < l; i++) {
@@ -2720,295 +2720,330 @@ let GameClient = module.exports = (function(){
 				}
 				messageQueue.length = 0;
 			}
-      lastTime = Date.now();
-      window.requestAnimationFrame(loop);
-    });
-  };
+			lastTime = Date.now();
+			window.requestAnimationFrame(loop);
+		});
+	};
 
-  let lastTime = 0;
-  let lastNetSendTime = 0, sendInterval = 1/ 20;
+	let lastTime = 0;
+	let lastNetSendTime = 0, sendInterval = 1/ 20;
 
-  let loop = () => {
-    let time = Date.now();
-    let elapsed = time - lastTime;
-    lastTime += elapsed;
-    if (elapsed > 66) elapsed = 66;
-    // ^^ Minimm 15 FPS - this is primarily to compenstate for alt-tab / focus loss
-    elapsed /= 1000;  // Convert to seconds
+	let loop = () => {
+		let time = Date.now();
+		let elapsed = time - lastTime;
+		lastTime += elapsed;
+		if (elapsed > 66) elapsed = 66;
+		// ^^ Minimm 15 FPS - this is primarily to compenstate for alt-tab / focus loss
+		elapsed /= 1000;  // Convert to seconds
 
-    let sendNetUpdate = false;
-    if (time - lastNetSendTime >= sendInterval) {
-      sendNetUpdate = true;
-      lastNetSendTime = time;
-    }
+		let sendNetUpdate = false;
+		if (time - lastNetSendTime >= sendInterval) {
+			sendNetUpdate = true;
+			lastNetSendTime = time;
+		}
 
-    if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
-      Fury.Input.requestPointerLock();
-    }
+		if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+			Fury.Input.requestPointerLock();
+		}
 
-    // Update Players
-    for (let i = 0, l = players.length; i < l; i++) {
-      if (players[i]) {
-        players[i].update(elapsed);
-      }
-    }
+		// Update Players
+		for (let i = 0, l = players.length; i < l; i++) {
+			if (players[i]) {
+				players[i].update(elapsed);
+			}
+		}
 
-    if (localPlayer) {
-      // Check for request pickup and send pickup message
-      if (localPlayer.requestPickup) {
-        // TODO: Arguably should set something to prevent rerequests until have response
-        localPlayer.requestPickup = false;
-        if (!localPlayer.heldItem) {
-          sendMessage(localPlayer.pickupMessage);
-        } else {
-          // HACK: should probably disambiguate input between interact and pickup
-          sendMessage(localPlayer.interactMessage);
-        }
+		if (localPlayer) {
+			// Check for request pickup and send pickup message or interact message as appropriate
+			if (localPlayer.requestPickup) {	// NOTE: This is used for pickup, drop and interact!
+				// TODO: Arguably should set something to prevent rerequests until have response
+				localPlayer.requestPickup = false;
 
-      }
-      if (localPlayer.requestDrop) {
-        localPlayer.requestDrop = false;
-        // TODO: Arguably should set something to prevent rerequests until have reponse
-        sendMessage(localPlayer.dropMessage);
-      }
+				let interactableNearby = false;
+				for (let i = 0, l = world.interactables.length; i < l; i++) {
+					let interactable = world.interactables[i];
+					if (interactable.canInteract(localPlayer.position)) {
+						interactableNearby = true;
+						break;
+					}
+				}
 
-      // Update Camera
-      vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
-      if (localPlayer.snapCamera) {
-        vec3.copy(camera.position, camera.targetPosition);
-        localPlayer.snapCamera = false;
-      } else {
-        vec3.lerp(camera.position, camera.targetPosition, localPlayer.position, 0.25);
-      }
-      quat.copy(camera.rotation, localPlayer.lookRotation);
+				if (!localPlayer.heldItem) {
+					let pickupNearby = false;
+					for (let i = 0, l = world.pickups.length; i < l; i++) {
+						let pickup = world.pickups[i];
+						if (!pickup.autoPickup && pickup.canPickup(localPlayer.position)) {
+							pickupNearby = true;
+							break;
+						}
+					}
 
-      if ((sendNetUpdate && localPlayer.stateDirty) || localPlayer.inputDirty) {
-        localPlayer.stateDirty = localPlayer.inputDirty = false;
-        sendMessage(localPlayer.updateMessage);
-      }
-    }
+					if (pickupNearby) {
+						// Try pickup!
+						sendMessage(localPlayer.pickupMessage);
+					} else if (interactableNearby) {
+						// Try interact
+						sendMessage(localPlayer.interactMessage);
+					}
+				} else {
+					if (interactableNearby) {
+						sendMessage(localPlayer.interactMessage);
+					} else {
+						// Drop what you're carrying
+						sendMessage(localPlayer.dropMessage);
+					}
+				}
 
-    scene.render();
+			}
+			if (localPlayer.requestDrop) {
+				localPlayer.requestDrop = false;
+				// TODO: Arguably should set something to prevent rerequests until have reponse
+				sendMessage(localPlayer.dropMessage);
+			}
 
-    Fury.Input.handleFrameFinished();
+			// Update Camera
+			vec3.add(camera.targetPosition, camera.playerOffset, localPlayer.position);
+			if (localPlayer.snapCamera) {
+				vec3.copy(camera.position, camera.targetPosition);
+				localPlayer.snapCamera = false;
+			} else {
+				vec3.lerp(camera.position, camera.targetPosition, localPlayer.position, 0.25);
+			}
+			quat.copy(camera.rotation, localPlayer.lookRotation);
 
-    window.requestAnimationFrame(loop);
-  };
+			if ((sendNetUpdate && localPlayer.stateDirty) || localPlayer.inputDirty) {
+				localPlayer.stateDirty = localPlayer.inputDirty = false;
+				sendMessage(localPlayer.updateMessage);
+			}
+		}
 
-  exports.onmessage = (message) => {
+		scene.render();
+
+		Fury.Input.handleFrameFinished();
+
+		window.requestAnimationFrame(loop);
+	};
+
+	exports.onmessage = (message) => {
 		// Wait for initial asset load
 		if (!assetLoadComplete) {
 			messageQueue.push(message);
 			return;
 		}
 
-    switch(message.type) {
-      case MessageType.ACKNOWLEDGE:
-        // NOTE: Will happen post init but not necessarily post asset load
-        localId = message.id;
-        handleInitialServerState(message.data);
+		switch(message.type) {
+			case MessageType.ACKNOWLEDGE:
+				// NOTE: Will happen post init but not necessarily post asset load
+				localId = message.id;
+				handleInitialServerState(message.data);
 
-        // TODO: Delay this greet until we're sure we have got nick name.
-        sendMessage({ type: MessageType.GREET, nick: localNick });
-        break;
-      case MessageType.CONNECTED:
-        serverState.players[message.id] = message.player;
-        spawnPlayer(message.id, message.player);
-        break;
-      case MessageType.DISCONNECTED:
-        serverState.players[message.id] = null;
-        dropPickups(message.id);
-        despawnPlayer(message.id);
-        break;
-      case MessageType.POSITION:
-        serverState.players[message.id].position = message.position;
-        updatePlayer(message.id, message);
-        if (message.win && message.id == localPlayer.id) {
-          // You Win!
-          let win = () => {
-            Fury.Input.releasePointerLock();
-            window.location = "./complete.html";  // Go to complete page
-          };
-          window.setTimeout(win, 1000);
-        }
-        break;
-      case MessageType.PICKUP:
-        assignPickup(message.pickupId, message.id);
-        break;
-      case MessageType.DROP:
-        dropPickups(message.id, message.position);
-        break;
-      case MessageType.INTERACT:
-        let interactable = world.getInteractable(message.interactableId);
-        let heldItem = world.getPickup(message.pickupId);
-        let resultPos = interactable.interact(heldItem);
-        if (resultPos) {
-          if (heldItem) {
-            heldItem.enabled = false;
-            vec3.copy(heldItem.position, resultPos);
-            quat.identity(heldItem.rotation);
-          } else {
-            console.error("Unable to find held item with id " + message.pickupId);
-          }
-          let player = getPlayer(message.id);
-          if (player) {
-            player.heldItem = null;
-          } else {
-            console.error("Unable to find player with id " + message.id);
-          }
-        }
-        break;
-    }
-  };
+				// TODO: Delay this greet until we're sure we have got nick name.
+				sendMessage({ type: MessageType.GREET, nick: localNick });
+				break;
+			case MessageType.CONNECTED:
+				serverState.players[message.id] = message.player;
+				spawnPlayer(message.id, message.player);
+				break;
+			case MessageType.DISCONNECTED:
+				serverState.players[message.id] = null;
+				dropPickups(message.id);
+				despawnPlayer(message.id);
+				break;
+			case MessageType.POSITION:
+				serverState.players[message.id].position = message.position;
+				updatePlayer(message.id, message);
+				if (message.win && message.id == localPlayer.id) {
+					// You Win!
+					let win = () => {
+						Fury.Input.releasePointerLock();
+						window.location = "./complete.html";  // Go to complete page
+					};
+					window.setTimeout(win, 1000);
+				}
+				break;
+			case MessageType.PICKUP:
+				assignPickup(message.pickupId, message.id);
+				break;
+			case MessageType.DROP:
+				dropPickups(message.id, message.position);
+				break;
+			case MessageType.INTERACT:
+				let interactable = world.getInteractable(message.interactableId);
+				let heldItem = world.getPickup(message.pickupId);
+				let result = interactable.interact(heldItem);
+				if (result && result.length) {
+					let resultPos = result;
+					if (resultPos) {
+						if (heldItem) {
+							heldItem.enabled = false;
+							vec3.copy(heldItem.position, resultPos);
+							quat.identity(heldItem.rotation);
+						} else {
+							console.error("Unable to find held item with id " + message.pickupId);
+						}
+						let player = getPlayer(message.id);
+						if (player) {
+							player.heldItem = null;
+						} else {
+							console.error("Unable to find player with id " + message.id);
+						}
+					}
+				} else if (result) {
+					// Pickedup an object - relies on synchronised state but should be fine
+					assignPickup(result.id, message.id);
+				}
+				break;
+		}
+	};
 
-  exports.ondisconnect = () => {
-    if (Fury.Input.isPointerLocked()) {
-      Fury.Input.releasePointerLock();
-    }
-    alert("Disconnected from Server!");
+	exports.ondisconnect = () => {
+		if (Fury.Input.isPointerLocked()) {
+			Fury.Input.releasePointerLock();
+		}
+		alert("Disconnected from Server!");
 		window.location = window.location;
-  };
+	};
 
-  let handleInitialServerState = (state) => {
-    // NOTE: Will happen post init but not necessarily post asset load
-    serverState = state;
+	let handleInitialServerState = (state) => {
+		// NOTE: Will happen post init but not necessarily post asset load
+		serverState = state;
 
-    // Load world level and instanitate scene visuals
-    var level = world.createLevel(serverState.level);
+		// Load world level and instanitate scene visuals
+		var level = world.createLevel(serverState.level);
 
 		// TODO: Wait for asset load - test with players already connected OR update visual creation to wait for asset load
-    // Add world objects to render scene
-    WorldVisuals.generateVisuals(world, scene, () => {
-      // World visuals instanitated - could defer player spawn until this point
-    });
+		// Add world objects to render scene
+		WorldVisuals.generateVisuals(world, scene, () => {
+			// World visuals instanitated - could defer player spawn until this point
+		});
 
-    // Spawn replicas for all existing players
-    for (let i = 0, l = state.players.length; i < l; i++) {
-      if (state.players[i]) {
-        if (state.players[i].id != localId) {
-          spawnPlayer(state.players[i].id, state.players[i]);
-        } else {
-          console.error("Received player data in initial state with local id");
-        }
-      }
-    }
+		// Spawn replicas for all existing players
+		for (let i = 0, l = state.players.length; i < l; i++) {
+			if (state.players[i]) {
+				if (state.players[i].id != localId) {
+					spawnPlayer(state.players[i].id, state.players[i]);
+				} else {
+					console.error("Received player data in initial state with local id");
+				}
+			}
+		}
 
-    // Handle Pickups
-    for (let i = 0, l = state.pickups.length; i < l; i++) {
-      if (state.pickups[i].owner != null) {
-        assignPickup(state.pickups[i].id, state.pickups[i].owner);
-      } else {
-        let pickup = world.getPickup(state.pickups[i].id);
-        if (pickup) {
-          vec3.copy(pickup.position, state.pickups[i].position);
-        }
-      }
-    }
+		// Handle Pickups
+		for (let i = 0, l = state.pickups.length; i < l; i++) {
+			if (state.pickups[i].owner != null) {
+				assignPickup(state.pickups[i].id, state.pickups[i].owner);
+			} else {
+				let pickup = world.getPickup(state.pickups[i].id);
+				if (pickup) {
+					vec3.copy(pickup.position, state.pickups[i].position);
+				}
+			}
+		}
 
-    for (let i = 0, l = state.interactables.length; i < l; i++) {
-      let interactableState = state.interactables[i];
-      if (interactableState) {
-        let id = interactableState.id;
-        let interactable = world.getInteractable(id);
-        if (interactable) {
-          // Copy power values
-          for (let j = 0, n = interactableState.power.length; j < n; j++) {
-            interactable.power[j] = interactableState.power[j];
-          }
-          if (interactable.onmessage) {
-            interactable.onmessage("init");	// TODO: Should not use event messaging for initialisation, that should be reserved for game events
-          }
-        }
-      }
-    }
-  };
+		for (let i = 0, l = state.interactables.length; i < l; i++) {
+			let interactableState = state.interactables[i];
+			if (interactableState) {
+				let id = interactableState.id;
+				let interactable = world.getInteractable(id);
+				if (interactable) {
+					// Copy power values
+					for (let j = 0, n = interactableState.power.length; j < n; j++) {
+						interactable.power[j] = interactableState.power[j];
+					}
+					if (interactable.onmessage) {
+						interactable.onmessage("init");	// TODO: Should not use event messaging for initialisation, that should be reserved for game events
+					}
+				}
+			}
+		}
+	};
 
-  // We should probably move these get methods to world
-  let assignPickup = (pickupId, playerId) => {
-    let pickup = world.getPickup(pickupId);
-    if (pickup) {
-      pickup.enabled = false;
-      let player = getPlayer(playerId);
-      if (player) {
-        player.heldItem = pickup;
-      } else {
-        pickup.visual.active = false;
-      }
-    }
-  };
+	// We should probably move these get methods to world
+	let assignPickup = (pickupId, playerId) => {
+		let pickup = world.getPickup(pickupId);
+		if (pickup) {
+			pickup.enabled = false;
+			let player = getPlayer(playerId);
+			if (player) {
+				player.heldItem = pickup;
+			} else {
+				pickup.visual.active = false;
+			}
+		}
+	};
 
-  let dropPickups = (playerId, position) => {
-    let player = getPlayer(playerId);
-    if (player && player.heldItem) {
-      player.heldItem.enabled = true;
-      if (position) {
-        vec3.copy(player.heldItem.position, position);
-      } else {
-        vec3.copy(player.heldItem.position, player.position);
-      }
-      player.heldItem = null;
-    }
-  };
+	let dropPickups = (playerId, position) => {
+		let player = getPlayer(playerId);
+		if (player && player.heldItem) {
+			player.heldItem.enabled = true;
+			if (position) {
+				vec3.copy(player.heldItem.position, position);
+			} else {
+				vec3.copy(player.heldItem.position, player.position);
+			}
+			player.heldItem = null;
+		}
+	};
 
-  let spawnPlayer = (id, player) => {
-    if (id == localId) {
-      localNick = player.nick;
-      localPlayer = Player.create({
-        id: id,
-        position: vec3.clone(player.position),
-        rotation: quat.clone(player.rotation),
-        world: world });
-      players.push(localPlayer);
-    } else {
-      let replica = Player.create({
-        id: id,
-        isReplica: true,
-        position: vec3.clone(player.position),
-        rotation: quat.clone(player.rotation),
-        world: world });
-      replica.visuals = PlayerVisuals.create(replica, scene);
-      players.push(replica);
-    }
-  };
+	let spawnPlayer = (id, player) => {
+		if (id == localId) {
+			localNick = player.nick;
+			localPlayer = Player.create({
+				id: id,
+				position: vec3.clone(player.position),
+				rotation: quat.clone(player.rotation),
+				world: world });
+			players.push(localPlayer);
+		} else {
+			let replica = Player.create({
+				id: id,
+				isReplica: true,
+				position: vec3.clone(player.position),
+				rotation: quat.clone(player.rotation),
+				world: world });
+			replica.visuals = PlayerVisuals.create(replica, scene);
+			players.push(replica);
+		}
+	};
 
-  let getPlayer = (id) => {
-    for (let i = 0, l = players.length; i < l; i++) {
-      if (players[i] && players[i].id == id) {
-        return players[i];
-      }
-    }
-    return null;
-  };
+	let getPlayer = (id) => {
+		for (let i = 0, l = players.length; i < l; i++) {
+			if (players[i] && players[i].id == id) {
+				return players[i];
+			}
+		}
+		return null;
+	};
 
-  let updatePlayer = (id, message) => {
-    if (id == localId) {
-      // Received correction from server
-      localPlayer.setLocalState(message);
-    } else {
-      // Update Replica
-      for (let i = 0, l = players.length; i < l; i++) {
-        if (players[i] && players[i].id == id) {
-          players[i].setReplicaState(message);
-          break;
-        }
-      }
-    }
-  };
+	let updatePlayer = (id, message) => {
+		if (id == localId) {
+			// Received correction from server
+			localPlayer.setLocalState(message);
+		} else {
+			// Update Replica
+			for (let i = 0, l = players.length; i < l; i++) {
+				if (players[i] && players[i].id == id) {
+					players[i].setReplicaState(message);
+					break;
+				}
+			}
+		}
+	};
 
-  let despawnPlayer = (id) => {
-    for(let i = 0, l = players.length; i < l; i++) {
-      if (players[i] && players[i].id == id) {
-        if (players[i].visuals) {
-          scene.remove(players[i].visuals);
-        }
-        players[i] = null;
-        // Would be nice to shorten the list but eh
-        break;
-      }
-    }
-  };
+	let despawnPlayer = (id) => {
+		for(let i = 0, l = players.length; i < l; i++) {
+			if (players[i] && players[i].id == id) {
+				if (players[i].visuals) {
+					scene.remove(players[i].visuals);
+				}
+				players[i] = null;
+				// Would be nice to shorten the list but eh
+				break;
+			}
+		}
+	};
 
-  return exports;
+	return exports;
 })();
 
 },{"../../Fury/src/fury.js":4,"../common/message-types":29,"../common/world":35,"./player":21,"./player-visuals":20,"./world-visuals":26}],20:[function(require,module,exports){
@@ -3133,7 +3168,7 @@ let Player = module.exports = (function() {
     	}
 
       // Pickup / Use Input
-      if (Fury.Input.keyDown("e", true)) {
+      if (Fury.Input.keyDown("e", true)) {	// TODO: or mouse down this frame
         player.requestPickup = true;
       }
       if (Fury.Input.keyDown("g", true)) {
@@ -3934,6 +3969,12 @@ let TeleporterVisuals = module.exports = (function() {
 						visuals.indicators[i].material = WorldVisuals.whiteMaterial;
 					}
 					break;
+				case "unpowered":
+					// Trigger unpowered visuals
+					for (let i = 0, l = visuals.indicators.length; i < l; i++) {
+						visuals.indicators[i].material = WorldVisuals.blackMaterial;
+					}
+					break;
 			}
 		};
 
@@ -4218,70 +4259,70 @@ let Bounds = require('../../Fury/src/bounds');
 let Maths = require('../../Fury/src/maths');
 
 let GameServer = module.exports = (function() {
-  let exports = {};
+	let exports = {};
 
-  // Format is (idToSendTo, objectToSend) for message
-  // Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
-  let sendMessage, distributeMessage;
+	// Format is (idToSendTo, objectToSend) for message
+	// Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
+	let sendMessage, distributeMessage;
 
-  // This is information which needs to be sent on client connection
-  // Holds DTOs, rather than actual world objects, might be good to call
-  // them as such and have classes for them
-  let globalState = {
-    players: [],
-    pickups: [],
-    interactables: []  // network interactables power state
-  };
-  let world = World.create();
+	// This is information which needs to be sent on client connection
+	// Holds DTOs, rather than actual world objects, might be good to call
+	// them as such and have classes for them
+	let globalState = {
+		players: [],
+		pickups: [],
+		interactables: []  // network interactables power state
+	};
+	let world = World.create();
 
-  exports.init = (sendDelegate, distributeDelegate) => {
-    sendMessage = sendDelegate;
-    distributeMessage = distributeDelegate;
+	exports.init = (sendDelegate, distributeDelegate) => {
+		sendMessage = sendDelegate;
+		distributeMessage = distributeDelegate;
 
-    globalState.level = "debug";
-    world.createLevel("debug");
-  };
+		globalState.level = "debug";
+		world.createLevel("debug");
+	};
 
-  exports.onclientconnect = (id) => {
-    sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: globalState });
-  };
+	exports.onclientconnect = (id) => {
+		sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: globalState });
+	};
 
-  let positionCache = [0,0,0];
+	let positionCache = [0,0,0];
 
-  // Helpers for copying into DTOs
-  // TODO: Move to common so we can reuse for client side DTOs
-  // note + converts back from string to number, arguably should use round
-  // https://stackoverflow.com/a/41716722
-  let round = (num) => {
-    return Math.round(num * 100 + Number.EPSILON) / 100;
-  };
+	// Helpers for copying into DTOs
+	// TODO: Move to common so we can reuse for client side DTOs
+	// note + converts back from string to number, arguably should use round
+	// https://stackoverflow.com/a/41716722
+	let round = (num) => {
+		return Math.round(num * 100 + Number.EPSILON) / 100;
+	};
 
-  let cloneArray3 = (array) => {
-    return [ round(array[0]), round(array[1]), round(array[2]) ];
-  };
-  let copyArray3 = (out, array) => {
-    out[0] = round(array[0]);
-    out[1] = round(array[1]);
-    out[2] = round(array[2]);
-  };
-  let cloneArray4 = (array) => {
-    return [ round(array[0]), round(array[1]), round(array[2]), round(array[3]) ];
-  };
-  let copyArray4 = (out, array) => {
-    out[0] = round(array[0]);
-    out[1] = round(array[1]);
-    out[2] = round(array[2]);
-    out[3] = round(array[3]);
-  };
+	let cloneArray3 = (array) => {
+		return [ round(array[0]), round(array[1]), round(array[2]) ];
+	};
+	let copyArray3 = (out, array) => {
+		out[0] = round(array[0]);
+		out[1] = round(array[1]);
+		out[2] = round(array[2]);
+	};
+	let cloneArray4 = (array) => {
+		return [ round(array[0]), round(array[1]), round(array[2]), round(array[3]) ];
+	};
+	let copyArray4 = (out, array) => {
+		out[0] = round(array[0]);
+		out[1] = round(array[1]);
+		out[2] = round(array[2]);
+		out[3] = round(array[3]);
+	};
 
-  exports.onmessage = (id, message) => {
-    switch(message.type) {
-      case MessageType.GREET:
-        let nick = message.nick;
-        if (!nick) nick = "Player " + (id + 1);
-        globalState.players[id] = { id: id, nick: nick, position: cloneArray3(world.initialSpawnPosition), rotation: [0,0,0,1] };
-        distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
-        break;
+	exports.onmessage = (id, message) => {
+		switch(message.type) {
+			case MessageType.GREET:
+				let nick = message.nick;
+				if (!nick) nick = "Player " + (id + 1);
+				globalState.players[id] = { id: id, nick: nick, position: cloneArray3(world.initialSpawnPosition), rotation: [0,0,0,1] };
+				distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+				break;
 			case MessageType.PICKUP:
 				// Expect position, run through pickups and try to pickup
 				// Could in theory use last known position it's probably fine
@@ -4306,193 +4347,196 @@ let GameServer = module.exports = (function() {
 					}
 				}
 				break;
-      case MessageType.DROP:
-        // If we wanted to be super accurate we could expect position
-        if (isHoldingPickup(id)) {
-          dropPickups(id, message.position); // Currently just drops all pickups
-          message.id = id;
-          distributeMessage(-1, message);
-        }
-        break;
-      case MessageType.INTERACT:
-        // Call interact then update global state
-        // and distribute
-        let position = globalState.players[id].position;
-        // Look for interactable at player position
-        for (let i = 0, l = world.interactables.length; i < l; i++) {
-          let interactable = world.interactables[i];
-          if (interactable.canInteract(position)) {
-            // Interact!
-            let heldPickupState = getHeldPickup(id);
-            let heldPickup = null;
-            if (heldPickupState) {
-              heldPickup = world.getPickup(heldPickupState.id);
-            }
-            let result = interactable.interact(heldPickup);
-            if (result) {
-              // Update world object (will want to do this on client too)
-              heldPickup.enabled = false;
-              Maths.vec3.copy(heldPickup.position, result);
-              // Don't have server side player objects so don't need to explicitly
-              // set player.heldItem to null, updating the heldPickupState does that
+			case MessageType.DROP:
+				// If we wanted to be super accurate we could expect position
+				if (isHoldingPickup(id)) {
+					dropPickups(id, message.position); // Currently just drops all pickups
+					message.id = id;
+					distributeMessage(-1, message);
+				}
+				break;
+			case MessageType.INTERACT:
+				// Call interact then update global state
+				// and distribute
+				let position = globalState.players[id].position;
+				// Look for interactable at player position
+				for (let i = 0, l = world.interactables.length; i < l; i++) {
+					let interactable = world.interactables[i];
+					if (interactable.canInteract(position)) {
+						// Interact!
+						let heldPickupState = getHeldPickup(id);
+						let heldPickup = null;
+						if (heldPickupState) {
+							heldPickup = world.getPickup(heldPickupState.id);
+						}
+						let result = interactable.interact(heldPickup);
+						if (result && result.length) {
+							// Update world object (will want to do this on client too)
+							heldPickup.enabled = false;
+							Maths.vec3.copy(heldPickup.position, result);
+							// Don't have server side player objects so don't need to explicitly
+							// set player.heldItem to null, updating the heldPickupState does that
 
-              // Update global state
-              heldPickupState.owner = null;
-              heldPickupState.position = cloneArray3(result);
-              setInteractableGlobalState(interactable.id, interactable.power);
+							// Update global state
+							heldPickupState.owner = null;
+							heldPickupState.position = cloneArray3(result);
+							setInteractableGlobalState(interactable.id, interactable.power);
 
-              // Set message pickup id
-              message.pickupId = heldPickup.id
-            }
+							// Set message pickup id
+							message.pickupId = heldPickup.id
+						} else if (result) {
+							result.enabled = false;
+							setPickupGlobalState(result.id, id);
+						}
 
-            // If we expand what interactables can do, e.g. just switches
-            // need to respond to state change here and put it in global state
+						// If we expand what interactables can do, e.g. just switches
+						// need to respond to state change here and put it in global state
 
-            message.id = id;
-            message.interactableId = interactable.id;
-            distributeMessage(-1, message);
-            break;
-          }
-        }
-        break;
-      case MessageType.POSITION:  // This is more a player transform / input sync
-        message.id = id;
+						message.id = id;
+						message.interactableId = interactable.id;
+						distributeMessage(-1, message);
+						break;
+					}
+				}
+				break;
+			case MessageType.POSITION:  // This is more a player transform / input sync
+				message.id = id;
 
-        copyArray3(positionCache, message.position);
-        let hasPositionChanged = !Maths.vec3.equals(positionCache, globalState.players[id].position);
-        if (hasPositionChanged)
-        copyArray3(globalState.players[id].position, message.position);
-        copyArray4(globalState.players[id].rotation, message.rotation);
+				copyArray3(positionCache, message.position);
+				let hasPositionChanged = !Maths.vec3.equals(positionCache, globalState.players[id].position);
+				if (hasPositionChanged)
+				copyArray3(globalState.players[id].position, message.position);
+				copyArray4(globalState.players[id].rotation, message.rotation);
 
-        // Check for teleporter collision
-        let shouldTeleport = false;
-        if (hasPositionChanged) {
-          for (let i = 0, l = world.teleporters.length; i < l; i++) {
-            let teleporter = world.teleporters[i];
-            // Ideally would have player concept on server now and could use it's AABB
-            if (teleporter.enabled && Bounds.contains(message.position, teleporter.bounds)) {
-              shouldTeleport = true;
-              // TODO: Not instant teleport please - requires game loop server side or some way to defer
-              Maths.vec3.copy(message.position, teleporter.targetPosition);
-              Maths.quat.copy(message.rotation, teleporter.targetRotation);
-              message.snapLook = true;
-              message.win = teleporter.win;
-              break;
-            }
-          }
-        }
+				// Check for teleporter collision
+				let shouldTeleport = false;
+				if (hasPositionChanged) {
+					for (let i = 0, l = world.teleporters.length; i < l; i++) {
+						let teleporter = world.teleporters[i];
+						// Ideally would have player concept on server now and could use it's AABB
+						if (teleporter.enabled && Bounds.contains(message.position, teleporter.bounds)) {
+							shouldTeleport = true;
+							// TODO: Not instant teleport please - requires game loop server side or some way to defer
+							Maths.vec3.copy(message.position, teleporter.targetPosition);
+							Maths.quat.copy(message.rotation, teleporter.targetRotation);
+							message.snapLook = true;
+							message.win = teleporter.win;
+							break;
+						}
+					}
+				}
 
-        // Message all others if no teleport, return message to sender as well as other players if teleporting
-        if (shouldTeleport) {
-          // Distribute to everyone
-          distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
-        } else {
-          // Distribute to other players
-          distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
-        }
+				// Message all others if no teleport, return message to sender as well as other players if teleporting
+				if (shouldTeleport) {
+					// Distribute to everyone
+					distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
+				} else {
+					// Distribute to other players
+					distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
+				}
 
-        // Check for auto-pickups
-        if (hasPositionChanged && !isHoldingPickup(id)) { // Q: Auto pickups probably shouldn't be held?
-          for (let i = 0, l = world.pickups.length; i < l; i++) {
-            let pickup = world.pickups[i];
-            if (pickup.autoPickup && pickup.canPickup(message.position)) {
-              // This player should pickup the object!
-              pickup.enabled = false;
-              setPickupGlobalState(pickup.id, id);
-              distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
-            }
-          }
-        }
-        break;
-      default:
-        message.id = id;
-        distributeMessage(id, message);
-        break;
-    }
-  };
+				// Check for auto-pickups
+				if (hasPositionChanged && !isHoldingPickup(id)) { // Q: Auto pickups probably shouldn't be held?
+					for (let i = 0, l = world.pickups.length; i < l; i++) {
+						let pickup = world.pickups[i];
+						if (pickup.autoPickup && pickup.canPickup(message.position)) {
+							// This player should pickup the object!
+							pickup.enabled = false;
+							setPickupGlobalState(pickup.id, id);
+							distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+						}
+					}
+				}
+				break;
+			default:
+				message.id = id;
+				distributeMessage(id, message);
+				break;
+		}
+	};
 
-  let setPickupGlobalState = (id, owner, position) => {
-    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].id == id) {
-        globalState.pickups[i].owner = owner;
-        if (position) {
-          if (globalState.pickups[i].position) {
-            copyArray3(globalState.pickups[i].position, position);
-          } else {
-            globalState.pickups[i].position = cloneArray3(position);
-          }
-        } else {
-          globalState.pickups[i].position = null;
-        }
-        return;
-      }
-    }
-    globalState.pickups.push({
-      id: id,
-      owner: owner,
-      position: position ? cloneArray3(position) : null
-    });
-  };
+	let setPickupGlobalState = (id, owner, position) => {
+		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+			if (globalState.pickups[i].id == id) {
+				globalState.pickups[i].owner = owner;
+				if (position) {
+					if (globalState.pickups[i].position) {
+						copyArray3(globalState.pickups[i].position, position);
+					} else {
+						globalState.pickups[i].position = cloneArray3(position);
+					}
+				} else {
+					globalState.pickups[i].position = null;
+				}
+				return;
+			}
+		}
+		globalState.pickups.push({
+			id: id,
+			owner: owner,
+			position: position ? cloneArray3(position) : null
+		});
+	};
 
-  let setInteractableGlobalState = (id, power) => {
-    for (let i = 0, l = globalState.interactables.length; i < l; i++) {
-      if (globalState.interactables[i].id == id) {
-        globalState.interactables[i].power = power.slice();
-        return;
-      }
-    }
-    globalState.interactables.push({ id: id, power: power.slice() });
-  };
+	let setInteractableGlobalState = (id, power) => {
+		for (let i = 0, l = globalState.interactables.length; i < l; i++) {
+			if (globalState.interactables[i].id == id) {
+				globalState.interactables[i].power = power.slice();
+				return;
+			}
+		}
+		globalState.interactables.push({ id: id, power: power.slice() });
+	};
 
-  let isHoldingPickup = (playerId) => {
-    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].owner == playerId) {
-        return true;
-      }
-    }
-    return false;
-  };
+	let isHoldingPickup = (playerId) => {
+		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+			if (globalState.pickups[i].owner == playerId) {
+				return true;
+			}
+		}
+		return false;
+	};
 
-  let getHeldPickup = (playerId) => {
-    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].owner == playerId) {
-        return globalState.pickups[i];
-      }
-    }
-    return null;
-  };
+	let getHeldPickup = (playerId) => {
+		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+			if (globalState.pickups[i].owner == playerId) {
+				return globalState.pickups[i];
+			}
+		}
+		return null;
+	};
 
-  let dropPickups = (id, dropPosition) => {
-    for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-      if (globalState.pickups[i].owner == id) {
-        if (!dropPosition) {
-          // TODO: Calculate from player position and rotation and drop slightly in front
-          dropPosition = globalState.players[id].position;
-        }
-        // re-enable world pickup
-        let pickup = world.getPickup(globalState.pickups[i].id);
-        if (pickup) {
-          pickup.enabled = true;
-          Maths.vec3.copy(pickup.position, dropPosition);
-        }
+	let dropPickups = (id, dropPosition) => {
+		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
+			if (globalState.pickups[i].owner == id) {
+				if (!dropPosition) {
+					// TODO: Calculate from player position and rotation and drop slightly in front
+					dropPosition = globalState.players[id].position;
+				}
+				// re-enable world pickup
+				let pickup = world.getPickup(globalState.pickups[i].id);
+				if (pickup) {
+					pickup.enabled = true;
+					Maths.vec3.copy(pickup.position, dropPosition);
+				}
 
-        // update global state pickup
-        globalState.pickups[i].owner = null;
-        globalState.pickups[i].position = cloneArray3(dropPosition);  // Clone they might continue to move, lol
-      }
-    }
-  };
+				// update global state pickup
+				globalState.pickups[i].owner = null;
+				globalState.pickups[i].position = cloneArray3(dropPosition);  // Clone they might continue to move, lol
+			}
+		}
+	};
 
-  exports.onclientdisconnect = (id) => {
-    // Only report disconnection of players which have sent greet
-    if (globalState.players[id]) {
-      dropPickups(id);  // Drop any owned pickups
-      globalState.players[id] = null; // Remove from state
-      distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
-    }
-  };
+	exports.onclientdisconnect = (id) => {
+		// Only report disconnection of players which have sent greet
+		if (globalState.players[id]) {
+			dropPickups(id);  // Drop any owned pickups
+			globalState.players[id] = null; // Remove from state
+			distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+		}
+	};
 
-  return exports;
+	return exports;
 
 })();
 
@@ -4504,153 +4548,174 @@ let Bounds = require('../../Fury/src/bounds');
 let quat = Maths.quat, vec3 = Maths.vec3;
 
 let Interactable = module.exports = (function() {
-  let exports = {};
-  let prototype = {
-    interact: function(heldItem) {
-      /* by default do nothing but have an interact method */
-      /* Should return a position to move item to if heldItem was taken */
-    },
-    canInteract: function(position) {
-      return Bounds.contains(position, this.bounds);
-    },
-    onmessage: function(message) { /* each type will handle messages differently */ }
-  };
+	let exports = {};
+	let prototype = {
+		interact: function(heldItem) {
+			/* by default do nothing but have an interact method */
+			/* Should return a position to move item to if heldItem was taken */
+		},
+		canInteract: function(position) {
+			return Bounds.contains(position, this.bounds);
+		},
+		onmessage: function(message) { /* each type will handle messages differently */ }
+	};
 
-  // Arguably rather than this enum/switch based pattern on type we could have other modules
-  // which Object.create(Interactable.create(params)); and then add additional logic / setup
-  var Type = exports.Type = {
-    // Sound maker
-    // Core Charger / Dispenser (?)
-    TELEPORTER_CONTROL: "teleporter_control"
-  };
+	// Arguably rather than this enum/switch based pattern on type we could have other modules
+	// which Object.create(Interactable.create(params)); and then add additional logic / setup
+	var Type = exports.Type = {
+		// Sound maker
+		// Core Charger / Dispenser (?)
+		TELEPORTER_CONTROL: "teleporter_control"
+	};
 
-  let createTeleporterControl = function(interactable, params) {
-    interactable.teleporter = params.teleporter;
-    // TODO: Push this control to teleporter (probably easier to have multiple)
-    // power block points requiring cores each than one requiring multiple
+	let createTeleporterControl = function(interactable, params) {
+		// TODO: Push this control to teleporter (probably easier to have multiple)
+		// power block points requiring cores each than one requiring multiple
+		interactable.teleporter = params.teleporter;
+		interactable.cores = [];
 
-    if (params.powerRequirements != null) {
-      interactable.powerRequirements = params.powerRequirements;  // Array of core numbers needed
-    } else {
-      interactable.powerRequirements = [];
-    }
-    if (params.startingPower != null) {
-      interactable.power = params.startingPower;
-    } else {
-      interactable.power = [];
-    }
-    // Fill power array with numbers
-    for (let i = interactable.power.length; i < interactable.powerRequirements.length; i++) {
-      interactable.power[i] = 0;
-    }
+		if (params.powerRequirements != null) {
+			interactable.powerRequirements = params.powerRequirements;  // Array of core numbers needed
+		} else {
+			interactable.powerRequirements = [];
+		}
+		if (params.startingPower != null) {
+			interactable.power = params.startingPower;
+		} else {
+			interactable.power = [];
+		}
+		// Fill power array with numbers
+		for (let i = interactable.power.length; i < interactable.powerRequirements.length; i++) {
+			interactable.power[i] = 0;
+		}
 
-    interactable.isPowered = function() {
-      if (interactable.powerRequirements) {
-        for (let i = 0, l = interactable.power.length; i < l; i++) {
-          if (interactable.power[i] < interactable.powerRequirements[i]) {
-            return false;
-          }
-        }
-      }
-      return true;
-    };
+		interactable.isPowered = function() {
+			if (interactable.powerRequirements) {
+				for (let i = 0, l = interactable.power.length; i < l; i++) {
+					if (interactable.power[i] < interactable.powerRequirements[i]) {
+						return false;
+					}
+				}
+			}
+			return true;
+		};
 
-    let messageTeleporter = (message) => {
-      if (interactable.teleporter && interactable.teleporter.onmessage) {
-        interactable.teleporter.onmessage(message);
-      }
-    };
+		let messageTeleporter = (message) => {
+			if (interactable.teleporter && interactable.teleporter.onmessage) {
+				interactable.teleporter.onmessage(message);
+			}
+		};
 
-    let message = (message) => {
-      if (message == "init") {	// HACK: Shouldn't use game event messaging for initalisation
-        if (interactable.isPowered()) {
-          messageTeleporter("control_powered");
-        }
-      }
-      if (interactable.visual && interactable.visual.onmessage) {
-          interactable.visual.onmessage(message);
-      }
-    };
+		let message = (message) => {
+			if (message == "init") {	// HACK: Shouldn't use game event messaging for initalisation
+				if (interactable.isPowered()) {
+					messageTeleporter("control_powered");
+				}
+			}
+			if (interactable.visual && interactable.visual.onmessage) {
+					interactable.visual.onmessage(message);
+			}
+		};
 
-    interactable.onmessage = message;
+		interactable.onmessage = message;
 
-    let attachPosition = vec3.create();
+		let attachPosition = vec3.create();
 
-    interactable.interact = function(heldItem) {
-      if (!interactable.isPowered()) {
-        if (heldItem) {
-          let coreIndex = heldItem.getCoreIndex();
-          if (coreIndex >= 0 && coreIndex < interactable.power.length
-            && interactable.power[coreIndex] < interactable.powerRequirements[coreIndex]) {
-            // Interaction successful - took power core
-            interactable.power[coreIndex] += 1;
-            if (interactable.isPowered()) {
-              messageTeleporter("control_powered");
-              message("powered");
-            } else {
-              message("took_core");
-            }
-            // HACK: place at bounds center - z
-            vec3.scaleAndAdd(attachPosition, interactable.bounds.center, Maths.vec3Z, -1);
-            return attachPosition;
-          } else {
-            // Interaction Unsuccessful - invalid core and unpowered
-            message("invalid_core");
-          }
-        } else {
-          // Interaction Unsuccessful - unpowered
-          message("unpowered");
-        }
-      } else {
-        // Interaction (un)successful - already powered
-        message("already_powered");
-      }
+		interactable.interact = function(heldItem) {
+			if (!interactable.isPowered()) {
+				if (heldItem) {
+					let coreIndex = heldItem.getCoreIndex();
+					if (coreIndex >= 0 && coreIndex < interactable.power.length
+						&& interactable.power[coreIndex] < interactable.powerRequirements[coreIndex]) {
+						// Interaction successful - took power core
+						interactable.power[coreIndex] += 1;
+						interactable.cores.push(heldItem);
+						if (interactable.isPowered()) {
+							messageTeleporter("control_powered");
+							message("powered");
+						} else {
+							message("took_core");
+						}
+						// HACK: place at bounds center - z
+						vec3.scaleAndAdd(attachPosition, interactable.bounds.center, Maths.vec3Z, -1);
+						return attachPosition;
+					} else {
+						// Interaction Unsuccessful - invalid core and unpowered
+						message("invalid_core");
+					}
+				} else {
+					// Interaction Unsuccessful - unpowered
+					message("unpowered");
+				}
+			} else {
+				if (interactable.cores.length) {
+					// Select Core
+					let index = interactable.cores.length - 1;
+					let core = interactable.cores[index];
+					interactable.cores.length = index;
 
-      return null;
-      // Q: Maybe control panel should toggle teleporter even if power requirements met?
-    };
+					// Reduce Power
+					let coreIndex = core.getCoreIndex();
+					interactable.power[coreIndex] -= 1;
 
-    // Disable teleporter if unpowered
-    if (!interactable.isPowered()) {
-      interactable.teleporter.enabled = false;
-    }
-  };
+					if (!interactable.isPowered()) {
+						messageTeleporter("control_unpowered");
+						message("unpowered");
+					} else {
+						message("loss_core");
+					}
+					return core; // NOTE this multi-cast result is bad for the JS compiler
+				} else {
+					// Interaction (un)successful - already powered - no cores to take
+					message("already_powered");
+				}
+			}
 
-  exports.create = (params) => {
-    // Required: id, type, min, size (+ more based on type)
-    let interactable = Object.create(prototype);
+			return null;
+			// Q: Maybe control panel should toggle teleporter even if power requirements met?
+		};
 
-    // Currently don't expect interactables to move
-    // if they need to move in future will need to make sure bounds
-    // are recalculated when queried and/or when moved
+		// Disable teleporter if unpowered
+		if (!interactable.isPowered()) {
+			interactable.teleporter.enabled = false;
+		}
+	};
 
-    interactable.id = params.id;  // Consider just using guids c.f. https://github.com/uuidjs/uuid
-    interactable.type = params.type;
-    // NOTE: no enabled option as we should respond even if 'disabled' based on state
+	exports.create = (params) => {
+		// Required: id, type, min, size (+ more based on type)
+		let interactable = Object.create(prototype);
 
-    // Interaction bounds
-    let size;
-    if (params.size) {
-      size = params.size;
-    } else {
-      size = vec3.fromValues(1,2,1);
-    }
-    let min = vec3.clone(params.min);
-    let max = vec3.create();
-    vec3.add(max, min, size);
-    interactable.bounds = Bounds.create({ min: min, max: max });
+		// Currently don't expect interactables to move
+		// if they need to move in future will need to make sure bounds
+		// are recalculated when queried and/or when moved
 
-    // Append interact method
-    switch(params.type) {
-      case Type.TELEPORTER_CONTROL: // requires params.teleporter, optional: powerRequirements, startingPower
-        createTeleporterControl(interactable, params);
-        break;
-    }
+		interactable.id = params.id;  // Consider just using guids c.f. https://github.com/uuidjs/uuid
+		interactable.type = params.type;
+		// NOTE: no enabled option as we should respond even if 'disabled' based on state
 
-    return interactable;
-  };
+		// Interaction bounds
+		let size;
+		if (params.size) {
+			size = params.size;
+		} else {
+			size = vec3.fromValues(1,2,1);
+		}
+		let min = vec3.clone(params.min);
+		let max = vec3.create();
+		vec3.add(max, min, size);
+		interactable.bounds = Bounds.create({ min: min, max: max });
 
-  return exports;
+		// Append interact method
+		switch(params.type) {
+			case Type.TELEPORTER_CONTROL: // requires params.teleporter, optional: powerRequirements, startingPower
+				createTeleporterControl(interactable, params);
+				break;
+		}
+
+		return interactable;
+	};
+
+	return exports;
 })();
 
 },{"../../Fury/src/bounds":2,"../../Fury/src/maths":8}],29:[function(require,module,exports){
@@ -5058,236 +5123,249 @@ let Pickup = require('./pickup');
 let Interactable = require('./interactable');
 
 let World = module.exports = (function() {
-  // Contains AABBs of the world environment
-  // and more importantly the 'vorld' which is the voxel data
-  // In charge of adding relevant objects to world based on level name
+	// Contains AABBs of the world environment
+	// and more importantly the 'vorld' which is the voxel data
+	// In charge of adding relevant objects to world based on level name
 
-  var exports = {};
-  var prototype = {
-    addBox: function(xMin, xMax, yMin, yMax, zMin, zMax) {
-      let min = vec3.fromValues(xMin, yMin, zMin);
-      let max = vec3.fromValues(xMax, yMax, zMax);
-      let box = Physics.Box.create({ min: min, max: max });
-      this.boxes.push(box);
-      return box;
-    },
-    getIntersections: function(results, box) {
-      results.length = 0;
-      for (let i = 0, l = this.boxes.length; i < l; i++) {
-        if (Physics.Box.intersect(box, this.boxes[i])) {
-          results.push(box);
-        }
-      }
-    },
-    getPickup: function(id) {
-      if (id) {
-        let pickups = this.pickups;
-        for (let i = 0, l = pickups.length; i < l; i++) {
-          if (pickups[i] && pickups[i].id == id) {
-            return pickups[i];
-          }
-        }
-      }
-      return null;
-    },
-    getInteractable: function(id) {
-      if (id) {
-        let interactables = this.interactables;
-        for (let i = 0, l = interactables.length; i < l; i++) {
-          if (interactables[i] && interactables[i].id === id) {
-            return interactables[i];
-          }
-        }
-      }
-      return null;
-    }
-  };
+	var exports = {};
+	var prototype = {
+		addBox: function(xMin, xMax, yMin, yMax, zMin, zMax) {
+			let min = vec3.fromValues(xMin, yMin, zMin);
+			let max = vec3.fromValues(xMax, yMax, zMax);
+			let box = Physics.Box.create({ min: min, max: max });
+			this.boxes.push(box);
+			return box;
+		},
+		getIntersections: function(results, box) {
+			results.length = 0;
+			for (let i = 0, l = this.boxes.length; i < l; i++) {
+				if (Physics.Box.intersect(box, this.boxes[i])) {
+					results.push(box);
+				}
+			}
+		},
+		getPickup: function(id) {
+			if (id) {
+				let pickups = this.pickups;
+				for (let i = 0, l = pickups.length; i < l; i++) {
+					if (pickups[i] && pickups[i].id == id) {
+						return pickups[i];
+					}
+				}
+			}
+			return null;
+		},
+		getInteractable: function(id) {
+			if (id) {
+				let interactables = this.interactables;
+				for (let i = 0, l = interactables.length; i < l; i++) {
+					if (interactables[i] && interactables[i].id === id) {
+						return interactables[i];
+					}
+				}
+			}
+			return null;
+		}
+	};
 
-  exports.create = function(params) {
-    let world = Object.create(prototype);
-    // We may want one of these *per* section
-    let vorld = Vorld.create({ chunkSize: 32 });
+	exports.create = function(params) {
+		let world = Object.create(prototype);
+		// We may want one of these *per* section
+		let vorld = Vorld.create({ chunkSize: 32 });
 
-    world.vorld = vorld;
-    world.boxes = [];
-    world.teleporters = [];
-    world.pickups = [];     // Dynamic so are networked in game server
-    world.initialSpawnPosition = [0, 1, 0];
-    world.interactables = [];
+		world.vorld = vorld;
+		world.boxes = [];
+		world.teleporters = [];
+		world.pickups = [];     // Dynamic so are networked in game server
+		world.initialSpawnPosition = [0, 1, 0];
+		world.interactables = [];
 
-    let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
-      for (let x = xMin; x <= xMax; x++) {
-        for (let z = zMin; z <= zMax; z++) {
-          for (let y = yMin; y <= yMax; y++) {
-            Vorld.addBlock(vorld, x, y, z, block);
-          }
-        }
-      }
-    };
+		let fill = function(xMin, xMax, yMin, yMax, zMin, zMax, block) {
+			for (let x = xMin; x <= xMax; x++) {
+				for (let z = zMin; z <= zMax; z++) {
+					for (let y = yMin; y <= yMax; y++) {
+						Vorld.addBlock(vorld, x, y, z, block);
+					}
+				}
+			}
+		};
 
-    let createRoom = function(x,y,z, w,h,d) {
-      let wall = VorldConfig.BlockIds.STONE_BLOCKS;
-      let floor = VorldConfig.BlockIds.STONE;
-      let ceiling = VorldConfig.BlockIds.STONE;
+		let createRoom = function(x,y,z, w,h,d) {
+			let wall = VorldConfig.BlockIds.STONE_BLOCKS;
+			let floor = VorldConfig.BlockIds.STONE;
+			let ceiling = VorldConfig.BlockIds.STONE;
 
-      // existing w = 9 x = -4
-      // d = 9 z = -4
-      // h = 4 y = 0
-      fill(x,x+w-1, y,y+h-1, z+d,z+d, wall);
-      fill(x,x+w-1, y,y+h-1, z-1,z-1, wall);
-      fill(x+w,x+w, y,y+h-1, z,z+d-1, wall);
-      fill(x-1,x-1, y,y+h-1, z,z+d-1, wall);
+			// existing w = 9 x = -4
+			// d = 9 z = -4
+			// h = 4 y = 0
+			fill(x,x+w-1, y,y+h-1, z+d,z+d, wall);
+			fill(x,x+w-1, y,y+h-1, z-1,z-1, wall);
+			fill(x+w,x+w, y,y+h-1, z,z+d-1, wall);
+			fill(x-1,x-1, y,y+h-1, z,z+d-1, wall);
 
-      fill(x,x+w-1, y+h,y+h, z,z+d-1, ceiling);
-      fill(x,x+w-1, y-1,y-1, z,z+d-1, floor);
-    }
+			fill(x,x+w-1, y+h,y+h, z,z+d-1, ceiling);
+			fill(x,x+w-1, y-1,y-1, z,z+d-1, floor);
+		}
 
-    // Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
-    let createTeleporter = function(x, y, z, targetPoint, targetRotation) {
-      let teleporterBlock = VorldConfig.BlockIds.GRASS;
-      fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
+		// Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
+		let createTeleporter = function(x, y, z, targetPoint, targetRotation) {
+			let teleporterBlock = VorldConfig.BlockIds.GRASS;
+			fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
 
-      let teleporterBounds = Physics.Box.create({
-        min: vec3.fromValues(x, y, z),
-        max: vec3.fromValues(x+1, y+2, z+1)
-      });
-      // TODO: Would be cool to add an outer bounds which starts some kinda visual change
-      // when you enter it (client side only), and potentially would act as the enabler for
-      // the inner bounds on server side.
-      let teleporter = {
-        enabled: true,
-        targetPosition: targetPoint,
-        targetRotation: targetRotation,
-        bounds: teleporterBounds,
-        controls: [],
-        onmessage: function(message) {
-          if (message == "control_powered") {
-            let wasPowered = this.enabled;
-            let powered = true;
-            for (let i = 0, l = this.controls.length; i < l; i++) {
-              if (!this.controls[i].isPowered()) {
-                powered = false;
-                break;
-              }
-            }
-            this.enabled = powered;
-            if (!wasPowered && powered && this.visual && this.visual.onmessage) {
-                this.visual.onmessage("powered")
-            }
-          }
-        }
-      };
-      world.teleporters.push(teleporter);
-      return teleporter;
-    };
+			let teleporterBounds = Physics.Box.create({
+				min: vec3.fromValues(x, y, z),
+				max: vec3.fromValues(x+1, y+2, z+1)
+			});
+			// TODO: Would be cool to add an outer bounds which starts some kinda visual change
+			// when you enter it (client side only), and potentially would act as the enabler for
+			// the inner bounds on server side.
+			let teleporter = {
+				enabled: true,
+				targetPosition: targetPoint,
+				targetRotation: targetRotation,
+				bounds: teleporterBounds,
+				controls: [],
+				onmessage: function(message) {
+					if (message == "control_powered") {
+						let wasPowered = this.enabled;
+						let powered = true;
+						for (let i = 0, l = this.controls.length; i < l; i++) {
+							if (!this.controls[i].isPowered()) {
+								powered = false;
+								break;
+							}
+						}
+						this.enabled = powered;
+						if (!wasPowered && powered && this.visual && this.visual.onmessage) {
+								this.visual.onmessage("powered")
+						}
+					} else if (message == "control_unpowered") {
+						let wasPowered = this.enabled;
+						let powered = true;
+						for (let i = 0, l = this.controls.length; i < l; i++) {
+							if (!this.controls[i].isPowered()) {
+								powered = false;
+								break;
+							}
+						}
+						this.enabled = powered;
+						if (wasPowered && !powered && this.visual && this.visual.onmessage) {
+							this.visual.onmessage("unpowered");
+						}
+					}
+				}
+			};
+			world.teleporters.push(teleporter);
+			return teleporter;
+		};
 
-    let createTeleporterControl = function(id, x, y, z, teleporter, powerRequirements) {
-      let teleporterControlBlock = VorldConfig.BlockIds.PLANKS;
-      fill(x,x,y,y,z,z, teleporterControlBlock);
-      let control = Interactable.create({
-        id: id,
-        type: Interactable.Type.TELEPORTER_CONTROL,
-        min: vec3.fromValues(x,y,z+1), // default size 1,2,1
-        teleporter: teleporter,
-        powerRequirements: powerRequirements
-      });
-      teleporter.controls.push(control);
-      world.interactables.push(control);
-    };
+		let createTeleporterControl = function(id, x, y, z, teleporter, powerRequirements) {
+			let teleporterControlBlock = VorldConfig.BlockIds.PLANKS;
+			fill(x,x,y,y,z,z, teleporterControlBlock);
+			let control = Interactable.create({
+				id: id,
+				type: Interactable.Type.TELEPORTER_CONTROL,
+				min: vec3.fromValues(x,y,z+1), // default size 1,2,1
+				teleporter: teleporter,
+				powerRequirements: powerRequirements
+			});
+			teleporter.controls.push(control);
+			world.interactables.push(control);
+		};
 
-    let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
-      world.pickups.push(Pickup.create({
-        id: id,
-        visualId: visualId,
-        position: vec3.fromValues(x,y,z),
-        radius: radius,
-        autoPickup: !!autoPickup
-      }));
-    };
+		let createPickup = function(id, visualId, x, y, z, radius, autoPickup) {
+			world.pickups.push(Pickup.create({
+				id: id,
+				visualId: visualId,
+				position: vec3.fromValues(x,y,z),
+				radius: radius,
+				autoPickup: !!autoPickup
+			}));
+		};
 
-    let createTestSteps = function(level) {
-      // test steps!
-      level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
-      level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
-    };
+		let createTestSteps = function(level) {
+			// test steps!
+			level.push(world.addBox(-0.25, 0.25, 0, 0.25, -3.5, -3));
+			level.push(world.addBox(-0.25, 0.25, 0, 0.5, -4, -3.5));
+		};
 
-    world.createLevel = (levelName) => {
-      switch(levelName) {
-        case "debug":
-          // Placeholder level creation
-          // Note ids aren't important so long as they're unique
-          let room1TargetPosition = vec3.fromValues(0.5,3,0.5);
-          let room1TargetRotation = Maths.quatEuler(0, 0, 0);
-          let room2TargetPosition = vec3.fromValues(-99.5,1,0.5);
-          let room2TargetRotation = Maths.quatEuler(0, 180, 0);
-          let room3TargetPosition = vec3.fromValues(101,1,0.5);
-          let room3TargetRotation = Maths.quatEuler(0, 180+45, 0);
+		world.createLevel = (levelName) => {
+			switch(levelName) {
+				case "debug":
+					// Placeholder level creation
+					// Note ids aren't important so long as they're unique
+					let room1TargetPosition = vec3.fromValues(0.5,3,0.5);
+					let room1TargetRotation = Maths.quatEuler(0, 0, 0);
+					let room2TargetPosition = vec3.fromValues(-99.5,1,0.5);
+					let room2TargetRotation = Maths.quatEuler(0, 180, 0);
+					let room3TargetPosition = vec3.fromValues(101,1,0.5);
+					let room3TargetRotation = Maths.quatEuler(0, 180+45, 0);
 
-          createRoom(-5,0,-10, 11,5,11);
-          // Note target position should add player y extents as player position
-          // isn't at the bottom of it's box cause we're insane
-          let targetPosition
-          createTeleporterControl(
-            "teleporter_control_1",
-            -2, 0, -10,
-            createTeleporter(-4, 0,-9, room2TargetPosition, room2TargetRotation),
-            [1] // requires one red core
-          );
-          createPickup("red_core_1", Pickup.visualIds.REDCORE, 0.5, 0.5, -9, 1.5, false);
+					createRoom(-5,0,-10, 11,5,11);
+					// Note target position should add player y extents as player position
+					// isn't at the bottom of it's box cause we're insane
+					let targetPosition
+					createTeleporterControl(
+						"teleporter_control_1",
+						-2, 0, -10,
+						createTeleporter(-4, 0,-9, room2TargetPosition, room2TargetRotation),
+						[1] // requires one red core
+					);
+					createPickup("red_core_1", Pickup.visualIds.REDCORE, 0.5, 0.5, -9, 1.5, false);
 
-          // TODO: Win on teleport through this one!
-          let winTeleporter = createTeleporter(4, 0, -9, vec3.fromValues(0,-100, 100), room1TargetRotation);
-          winTeleporter.win = true;
-          createTeleporterControl(
-            "teleporter_control_exit",
-            2, 0, -10,
-            winTeleporter,
-            [0, 1]  // requires one blue core
-          );
+					// TODO: Win on teleport through this one!
+					let winTeleporter = createTeleporter(4, 0, -9, vec3.fromValues(0,-100, 100), room1TargetRotation);
+					winTeleporter.win = true;
+					createTeleporterControl(
+						"teleporter_control_exit",
+						2, 0, -10,
+						winTeleporter,
+						[0, 1]  // requires one blue core
+					);
 
-          // Ability to set multiple bounds positions, NESW
+					// Ability to set multiple bounds positions, NESW
 
-          /* TODO: Add debug visuals on corner of teleporters (for off and on) */
-          /* Add debug visuals on corners of control panels (to denote required cores) */
+					/* TODO: Add debug visuals on corner of teleporters (for off and on) */
+					/* Add debug visuals on corners of control panels (to denote required cores) */
 
-          /* Advanced Mechanics TODO:
-            Have second teleporter in room 1 require multiple cores (blue and red)
-            Add another red core to room 3
-            Need to be able to remove cores from controls if you put it in and place it in the other
-            Need to be able to drop cores into teleporter without using it (another interactable which teleports cores it's given)
-          */
+					/* Advanced Mechanics TODO:
+						Have second teleporter in room 1 require multiple cores (blue and red)
+						Add another red core to room 3
+						Need to be able to remove cores from controls if you put it in and place it in the other
+						Need to be able to drop cores into teleporter without using it (another interactable which teleports cores it's given)
+					*/
 
-          let d = 30;
-          createRoom(-101, 0, -1, 3, 3, d);
-          createTeleporter(-100, 0, d-3, room3TargetPosition, room3TargetRotation);
-          createPickup("blue_core_1", Pickup.visualIds.BLUECORE, -99.5, 0.5, 10, 1.5, false);
+					let d = 30;
+					createRoom(-101, 0, -1, 3, 3, d);
+					createTeleporter(-100, 0, d-3, room3TargetPosition, room3TargetRotation);
+					createPickup("blue_core_1", Pickup.visualIds.BLUECORE, -99.5, 0.5, 10, 1.5, false);
 
-          createRoom(100, -4, -1, 30, 8, 20);
-          createPickup("yellow_core_1", Pickup.visualIds.YELLOWCORE, 105, -3, 4, 1.5, false);
-          createPickup("green_core_1", Pickup.visualIds.GREENCORE, 115, -3, 10, 1.5, false);
-          let room3Teleporter =  createTeleporter(128, -4, 0, room1TargetPosition, room1TargetRotation);
-          createTeleporterControl(
-            "teleporter_control_3_yellow",
-            128, -4, 2,
-            room3Teleporter,
-            [0,0,1] // requires one yellow core
-          );
-          createTeleporterControl(
-            "teleporter_control_3_green",
-            129, -4, 2,
-            room3Teleporter,
-            [0,0,0,1] // requires one green core
-          );
-          break;
-      }
-    };
+					createRoom(100, -4, -1, 30, 8, 20);
+					createPickup("yellow_core_1", Pickup.visualIds.YELLOWCORE, 105, -3, 4, 1.5, false);
+					createPickup("green_core_1", Pickup.visualIds.GREENCORE, 115, -3, 10, 1.5, false);
+					let room3Teleporter =  createTeleporter(128, -4, 0, room1TargetPosition, room1TargetRotation);
+					createTeleporterControl(
+						"teleporter_control_3_yellow",
+						128, -4, 2,
+						room3Teleporter,
+						[0,0,1] // requires one yellow core
+					);
+					createTeleporterControl(
+						"teleporter_control_3_green",
+						129, -4, 2,
+						room3Teleporter,
+						[0,0,0,1] // requires one green core
+					);
+					break;
+			}
+		};
 
-    // TODO: Create spawn methods with listeners
+		// TODO: Create spawn methods with listeners
 
-    return world;
-  };
+		return world;
+	};
 
-  return exports;
+	return exports;
 })();
 
 },{"../../Fury/src/fury.js":4,"./interactable":28,"./pickup":30,"./vorld/config":32,"./vorld/vorld":33}]},{},[16]);
