@@ -258,22 +258,24 @@ let World = module.exports = (function() {
 			let pickupIds = [ Pickup.visualIds.REDCORE, Pickup.visualIds.BLUECORE, Pickup.visualIds.YELLOWCORE, Pickup.visualIds.GREENCORE ];
 
 			let exitPosition = vec3.fromValues(-100, 0, 0);
-			let targetRotation = Maths.quatEuler(0, 180, 0);
+			let targetRotation = Maths.quatEuler(0, 0, 0);
+			let interRoomSpacing = 100;
 
 			for (let i = 0, l = level.rooms.length; i < l; i++) {
 				// Create room sized by number of teleporters it needs for now
 				let teleporters = level.rooms[i].teleporters;
-				let roomWidth = 7 * teleporters.length - 1;
+				let roomWidth = 7 * teleporters.length - 2;
 				let roomDepth = 4 + zPadding;
 				createRoom(roomOffset[0], roomOffset[1], roomOffset[2] - roomDepth, roomWidth, roomHeight, roomDepth);
 
 				// Create Teleporters
 				for (let j = 0, n = teleporters.length; j < n; j++) {
-					let teleportPosition = vec3.fromValues(0,0,1);
+					let teleportPosition = vec3.fromValues(0,1,-1);
 					if (teleporters[j].isProgression) {
 						vec3.copy(teleportPosition, exitPosition);
 					} else {
-						teleportPosition[0] = teleporters[j].target * 100;	// TODO: actually know the position rather than just spacing by 100
+						let targetRoom = teleporters[j].target;
+						teleportPosition[0] = targetRoom * interRoomSpacing + (7 * level.rooms[targetRoom].teleporters.length - 2) / 2;
 					}
 					let teleporter = createTeleporter(roomOffset[0] + j * 7 + 2, roomOffset[1], roomOffset[2] - roomDepth + 2, teleportPosition, targetRotation);
 
@@ -283,16 +285,41 @@ let World = module.exports = (function() {
 						teleporter.isProgression = true;
 					}
 
+					let panelsNeeded = 0;
+					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
+						if (teleporters[j].powerRequirements[k] > 0) {
+							panelsNeeded += 1;
+						}
+					}
+
+					let panelsSpawned = 0;
 					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
 						// Create a control panel for each power core type needed
 						if (teleporters[j].powerRequirements[k] > 0) {
 							let controlPower = [0, 0, 0, 0];
 							controlPower[k] = teleporters[j].powerRequirements[k];
+
+							// Lay these out nicer than just starting at teleporter left and going right
+							// Behind centered if 1, and either side if 2, behind all if 3, behind with gap in the middle if four
+							let x = roomOffset[0] + j * 7;
+							if (panelsNeeded == 1) {
+								x += 2;
+							} else if (panelsNeeded == 2) {
+								x += 1 + 2*panelsSpawned;
+							} else if (panelsNeeded == 3) {
+								x += 1 + panelsSpawned;
+							} else if (panelsSpawned < 2){
+								x += panelsSpawned;
+							} else {
+								x += panelsSpawned + 1;
+							}
+
 							createTeleporterControl(
 								"teleporter_control_" + (teleporterControlIndex++),
-								roomOffset[0] + j * 7 + 1 + k, roomOffset[1], roomOffset[2] - roomDepth,
+								x, roomOffset[1], roomOffset[2] - roomDepth,
 								teleporter,
 								controlPower);
+							panelsSpawned++;
 						}
 					}
 				}
@@ -322,11 +349,11 @@ let World = module.exports = (function() {
 
 				if (level.start == i) {
 					vec3.add(world.initialSpawnPosition, roomOffset, Maths.vec3Y);
-					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth/2);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth / 2);
 					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3Z, -1);
 				}
 
-				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, 100);
+				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, interRoomSpacing);
 			}
 		};
 

@@ -4869,40 +4869,97 @@ let PuzzleGenerator = module.exports = (function() {
 
 		// Enough theory crafting, lets ignore more than one level of nesting code for now
 		// First Test - nesting level 0, length 1
-		let input = { start: 0, units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
-		// TODO: ^^ good to have everything initially but should be able to omit keys and it still work (just assume 0)
-		let roomUnits = [];
-		let output = { start: 0, rooms: [] };
+		// let input = { start: 0, units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
+		let input = { start: 1, units: [
+			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
+		};
 
-		// Determine which units are rooms
-		for (let i = 0, l = input.units.length; i < l; i++) {
-			if (!input.units[i].units || !input.units[i].length) {
-				input.units[i].index = i;
-				roomUnits.push(input.units[i]);
-			}
-		}
+		let startUnit = input.units[input.start];
 
-		for (let i = 0, l = roomUnits.length; i < l; i++) {
+		let createRoom = function(roomUnit, isProgression, target) {
 			let room = { teleporters: [], cores: [0,0,0,0] };
 
-			// Just add the exit teleporter - either is progression or next room in parent loop
-			let isProgression = input.start == roomUnits[i].index;
-			let teleporter = { powerRequirements: roomUnits[i].exitPower.slice() };
+			// Create Exit Teleporter
+			room.teleporters.push(createTeleporter(roomUnit.exitPower, isProgression, target));
+
+			// It's room level exit so just give it the power needed to get out
+			// technically should be using exitLocation / keyLocation
+			for (let i = 0; i < 4; i++) {
+				room.cores[i] = roomUnit.exitPower[i] | 0;
+			}
+			return room;
+		};
+
+		let createTeleporter = function(exitPower, isProgression, target) {
+			let teleporter = { powerRequirements: exitPower.slice() };
 			if (isProgression) {
-				teleporter.isProgression = true;
-				// Will eventually also need a target for when we chain puzzles together
+				teleporter.isProgression = isProgression;
 			} else {
-				teleporter.target = (i + 1) % l;	// Is this good? Depends on how we build this rooms array! should be the room index of the next room in this unit loop
+				teleporter.target = target;
 			}
-			room.teleporters.push(teleporter);
-			// Just give it the power needed to get out
-			for (let j = 0; j < 4; j++) {
-				room.cores[j] = roomUnits[i].exitPower[j] | 0;
+			return teleporter
+		};
+
+		// https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+		let shuffleArray = function(array) {
+			let currentIndex = array.length, temp, randomIndex;
+			while (0 !== currentIndex) {
+				randomIndex = Math.floor(Math.random() * currentIndex);
+				currentIndex -= 1;
+				temp = array[currentIndex];
+				array[currentIndex] = array[randomIndex];
+				array[randomIndex] = temp;
 			}
-			output.rooms.push(room);
+			return array;
+		};
+
+		let output = { start: 0, rooms: [] };
+		if (!startUnit.units || !startUnit.units.length) {
+			// Single length just create a room
+			output.rooms.push(createRoom(startUnit, true));
+		} else {
+			// Recurve into units
+			let unitRooms = output.rooms;
+			let nestingLevel = 1;	// TODO: Support more than one please!
+
+			// NOTE: using output.rooms to mean rooms for this unit, which would not be true with further nesting
+			// Also some of the maths likely wouldn't work
+			for (let i = 0, l = startUnit.units.length; i < l; i++) {
+				// NOTE: Assuming these units are rooms, which is not valid but one step at a time kay
+				unitRooms.push(createRoom(input.units[startUnit.units[i]], false, (i + 1) % l));
+			}
+			let exitRoomIndex = startUnit.exitLocations[0] % unitRooms.length;	// Additional array entries would be used for further nesting
+
+			// Add exit teleporter
+			unitRooms[exitRoomIndex].teleporters.push(createTeleporter(startUnit.exitPower, true));
+
+			// Distribute cores to solve across rooms
+			for (let colorIndex = 0; colorIndex < startUnit.exitPower.length; colorIndex++) {
+				let requiredPower = startUnit.exitPower[colorIndex] | 0;
+
+				// Account for shared power needs - don't spawn cores which have to be available for the room because of the lower loop teleporters
+				let minPowerRequirement = 0;
+				for (let i = 0; i < nestingLevel; i++) {
+					let teleporter = unitRooms[exitRoomIndex].teleporters[i];
+					if (colorIndex < teleporter.powerRequirements.length) {
+						minPowerRequirement += teleporter.powerRequirements[colorIndex] | 0;
+					}
+				}
+				requiredPower -= minPowerRequirement;
+
+				if (requiredPower > 0) {
+					let offsetIndex = colorIndex % startUnit.keyLocationOffsets.length;
+					// key location offsets is used for multiple color keys - this does mean the pattern would be cyclically the same for additional nesting but :shrug:
+					let coreRoomIndex = (startUnit.keyLocations[0] + startUnit.keyLocationOffsets[offsetIndex]) % unitRooms.length; // Additional array entries would be used for further nesting
+					unitRooms[coreRoomIndex].cores[colorIndex] += requiredPower;
+				}
+			}
+
+			// Now shuffle swap teleporter positions extra random!
+			shuffleArray(unitRooms[exitRoomIndex].teleporters);
 		}
 
-		// No nesting in current input so we're done for now
 		return output;
 	};
 
@@ -5473,22 +5530,24 @@ let World = module.exports = (function() {
 			let pickupIds = [ Pickup.visualIds.REDCORE, Pickup.visualIds.BLUECORE, Pickup.visualIds.YELLOWCORE, Pickup.visualIds.GREENCORE ];
 
 			let exitPosition = vec3.fromValues(-100, 0, 0);
-			let targetRotation = Maths.quatEuler(0, 180, 0);
+			let targetRotation = Maths.quatEuler(0, 0, 0);
+			let interRoomSpacing = 100;
 
 			for (let i = 0, l = level.rooms.length; i < l; i++) {
 				// Create room sized by number of teleporters it needs for now
 				let teleporters = level.rooms[i].teleporters;
-				let roomWidth = 7 * teleporters.length - 1;
+				let roomWidth = 7 * teleporters.length - 2;
 				let roomDepth = 4 + zPadding;
 				createRoom(roomOffset[0], roomOffset[1], roomOffset[2] - roomDepth, roomWidth, roomHeight, roomDepth);
 
 				// Create Teleporters
 				for (let j = 0, n = teleporters.length; j < n; j++) {
-					let teleportPosition = vec3.fromValues(0,0,1);
+					let teleportPosition = vec3.fromValues(0,1,-1);
 					if (teleporters[j].isProgression) {
 						vec3.copy(teleportPosition, exitPosition);
 					} else {
-						teleportPosition[0] = teleporters[j].target * 100;	// TODO: actually know the position rather than just spacing by 100
+						let targetRoom = teleporters[j].target;
+						teleportPosition[0] = targetRoom * interRoomSpacing + (7 * level.rooms[targetRoom].teleporters.length - 2) / 2;
 					}
 					let teleporter = createTeleporter(roomOffset[0] + j * 7 + 2, roomOffset[1], roomOffset[2] - roomDepth + 2, teleportPosition, targetRotation);
 
@@ -5498,16 +5557,41 @@ let World = module.exports = (function() {
 						teleporter.isProgression = true;
 					}
 
+					let panelsNeeded = 0;
+					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
+						if (teleporters[j].powerRequirements[k] > 0) {
+							panelsNeeded += 1;
+						}
+					}
+
+					let panelsSpawned = 0;
 					for (let k = 0, m = teleporters[j].powerRequirements.length; k < m; k++) {
 						// Create a control panel for each power core type needed
 						if (teleporters[j].powerRequirements[k] > 0) {
 							let controlPower = [0, 0, 0, 0];
 							controlPower[k] = teleporters[j].powerRequirements[k];
+
+							// Lay these out nicer than just starting at teleporter left and going right
+							// Behind centered if 1, and either side if 2, behind all if 3, behind with gap in the middle if four
+							let x = roomOffset[0] + j * 7;
+							if (panelsNeeded == 1) {
+								x += 2;
+							} else if (panelsNeeded == 2) {
+								x += 1 + 2*panelsSpawned;
+							} else if (panelsNeeded == 3) {
+								x += 1 + panelsSpawned;
+							} else if (panelsSpawned < 2){
+								x += panelsSpawned;
+							} else {
+								x += panelsSpawned + 1;
+							}
+
 							createTeleporterControl(
 								"teleporter_control_" + (teleporterControlIndex++),
-								roomOffset[0] + j * 7 + 1 + k, roomOffset[1], roomOffset[2] - roomDepth,
+								x, roomOffset[1], roomOffset[2] - roomDepth,
 								teleporter,
 								controlPower);
+							panelsSpawned++;
 						}
 					}
 				}
@@ -5537,11 +5621,11 @@ let World = module.exports = (function() {
 
 				if (level.start == i) {
 					vec3.add(world.initialSpawnPosition, roomOffset, Maths.vec3Y);
-					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth/2);
+					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3X, roomWidth / 2);
 					vec3.scaleAndAdd(world.initialSpawnPosition, world.initialSpawnPosition, Maths.vec3Z, -1);
 				}
 
-				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, 100);
+				vec3.scaleAndAdd(roomOffset, roomOffset, Maths.vec3X, interRoomSpacing);
 			}
 		};
 
