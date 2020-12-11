@@ -215,6 +215,7 @@ let GameClient = module.exports = (function(){
       Fury.Input.releasePointerLock();
     }
     alert("Disconnected from Server!");
+		window.location = window.location;
   };
 
   let handleInitialServerState = (state) => {

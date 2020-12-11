@@ -2865,6 +2865,7 @@ let GameClient = module.exports = (function(){
       Fury.Input.releasePointerLock();
     }
     alert("Disconnected from Server!");
+		window.location = window.location;
   };
 
   let handleInitialServerState = (state) => {
@@ -4166,23 +4167,30 @@ let GameServer = module.exports = (function() {
         globalState.players[id] = { id: id, nick: nick, position: cloneArray3(world.initialSpawnPosition), rotation: [0,0,0,1] };
         distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
         break;
-      case MessageType.PICKUP:
-        // Expect position, run through pickups and try to pickup
-        // Could in theory use last known position it's probably fine
-        if (!isHoldingPickup(id)) {
-          for (let i = 0, l = world.pickups.length; i < l; i++) {
-            let pickup = world.pickups[i];
-            if (pickup.canPickup(message.position)) {
-              // TODO: just cache and compare against distance then pikcup the closest
-              // This player should pickup the object!
-              pickup.enabled = false;
-              setPickupGlobalState(pickup.id, id);
-              distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
-              break;  // Only pickup one object at a time!
-            }
-          }
-        }
-        break;
+			case MessageType.PICKUP:
+				// Expect position, run through pickups and try to pickup
+				// Could in theory use last known position it's probably fine
+				if (!isHoldingPickup(id)) {
+					let closestPickup = null;
+					let minSqrDistance = Number.MAX_VALUE;
+					for (let i = 0, l = world.pickups.length; i < l; i++) {
+						let pickup = world.pickups[i];
+						if (pickup.canPickup(message.position)) {
+							let sqrDistance = Maths.vec3.squaredDistance(message.position, pickup.position);
+							if (sqrDistance < minSqrDistance) {
+								closestPickup = pickup;
+								minSqrDistance = sqrDistance;
+							}
+						}
+					}
+
+					if (closestPickup) {
+						closestPickup.enabled = false;
+						setPickupGlobalState(closestPickup.id, id);
+						distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: closestPickup.id });
+					}
+				}
+				break;
       case MessageType.DROP:
         // If we wanted to be super accurate we could expect position
         if (isHoldingPickup(id)) {
