@@ -2827,7 +2827,6 @@ let GameClient = module.exports = (function(){
           // You Win!
           let win = () => {
             Fury.Input.releasePointerLock();
-            window.alert("You Win!");
             window.location = "./complete.html";  // Go to complete page
           };
           window.setTimeout(win, 1000);
