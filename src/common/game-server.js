@@ -178,44 +178,54 @@ let GameServer = module.exports = (function() {
 				// and distribute
 				let position = globalState.players[id].position;
 				// Look for interactable at player position
+				let closestInteractable = null;
+				let minSqrDistance = Number.MAX_VALUE;
 				for (let i = 0, l = world.interactables.length; i < l; i++) {
 					let interactable = world.interactables[i];
 					if (interactable.canInteract(position)) {
-						// Interact!
-						let heldPickupState = getHeldPickup(id);
-						let heldPickup = null;
-						if (heldPickupState) {
-							heldPickup = world.getPickup(heldPickupState.id);
+						let sqrDistance = Maths.vec3.squaredDistance(position, interactable.position);
+						if (sqrDistance < minSqrDistance) {
+							minSqrDistance = sqrDistance;
+							closestInteractable = interactable;
 						}
-						let result = interactable.interact(heldPickup);
-						if (result && result.length) {
-							// Update world object (will want to do this on client too)
-							heldPickup.enabled = false;
-							Maths.vec3.copy(heldPickup.position, result);
-							// Don't have server side player objects so don't need to explicitly
-							// set player.heldItem to null, updating the heldPickupState does that
-
-							// Update global state
-							heldPickupState.owner = null;
-							heldPickupState.position = cloneArray3(result);
-							setInteractableGlobalState(id, interactable.id, interactable.power);
-
-							// Set message pickup id
-							message.pickupId = heldPickup.id
-						} else if (result) {
-							result.enabled = false;
-							setPickupGlobalState(id, result.id, id);
-							setInteractableGlobalState(id, interactable.id, interactable.power);
-						}
-
-						// If we expand what interactables can do, e.g. just switches
-						// need to respond to state change here and put it in global state
-
-						message.id = id;
-						message.interactableId = interactable.id;
-						distributeMessage(id, -1, message);
-						break;
 					}
+				}
+
+				if (closestInteractable != null) {
+					let interactable = closestInteractable;
+					// Interact!
+					let heldPickupState = getHeldPickup(id);
+					let heldPickup = null;
+					if (heldPickupState) {
+						heldPickup = world.getPickup(heldPickupState.id);
+					}
+					let result = interactable.interact(heldPickup);
+					if (result && result.length) {
+						// Update world object (will want to do this on client too)
+						heldPickup.enabled = false;
+						Maths.vec3.copy(heldPickup.position, result);
+						// Don't have server side player objects so don't need to explicitly
+						// set player.heldItem to null, updating the heldPickupState does that
+
+						// Update global state
+						heldPickupState.owner = null;
+						heldPickupState.position = cloneArray3(result);
+						setInteractableGlobalState(id, interactable.id, interactable.power);
+
+						// Set message pickup id
+						message.pickupId = heldPickup.id
+					} else if (result) {
+						result.enabled = false;
+						setPickupGlobalState(id, result.id, id);
+						setInteractableGlobalState(id, interactable.id, interactable.power);
+					}
+
+					// If we expand what interactables can do, e.g. just switches
+					// need to respond to state change here and put it in global state
+
+					message.id = id;
+					message.interactableId = interactable.id;
+					distributeMessage(id, -1, message);
 				}
 				break;
 			case MessageType.POSITION:  // This is more a player transform / input sync

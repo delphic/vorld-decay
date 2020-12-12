@@ -1,14 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>Vorld Decay</title>
-    <meta charset="utf-8" />
-    <link rel="stylesheet" href="styles.css" type="text/css" />
-    <link rel="icon" href="./images/favicon.png" />
-    <script src="./scripts/vorld-decay.js"></script>
-    <script src="./scripts/mesher-worker.js"></script> <!-- Not technically needed *but* it allows Ctrl + F5 to update -->
-  </head>
-  <body>
-    <canvas id="fury" oncontextmenu="return false;"></canvas>
-  </body>
+	<head>
+		<title>Vorld Decay</title>
+		<meta charset="utf-8" />
+		<link rel="stylesheet" href="styles.css" type="text/css" />
+		<link rel="icon" href="./images/favicon.png" />
+		<script src="./scripts/vorld-decay.js"></script>
+		<script src="./scripts/mesher-worker.js"></script> <!-- Not technically needed *but* it allows Ctrl + F5 to update -->
+	</head>
+	<body>
+		<div id="play_prompt" class="popupContainer">
+			<div class="popup">
+				<h2>Vorld Decay</h2>
+				<p>You're lost in a labyrinth of teleporters!</p>
+				<p>Use power cores (the floating coloured cubes) to power the teleporters and escape!</p>
+				<p>Use WASD to move, look around with the mouse or the arrow keys.</p>
+				<p>Use E pickup and drop cores, and also to place or remove them from the control panels.</p>
+				<p>Good Luck!</p>
+				<input type="button" value="Brave the Labyrinth" onclick="start();" />
+			</div>
+			<script>
+let start = function() {
+	document.getElementById('play_prompt').style = 'display: none;';
+}
+			</script>
+		</div>
+		<canvas id="fury" oncontextmenu="return false;"></canvas>
+	</body>
 </html>

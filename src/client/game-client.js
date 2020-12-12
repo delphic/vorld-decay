@@ -92,6 +92,9 @@ let GameClient = module.exports = (function(){
 
 		if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
 			Fury.Input.requestPointerLock();
+			if (!document.fullscreenElement) {
+				glCanvas.requestFullscreen();
+			}
 		}
 
 		// Update Players

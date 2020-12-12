@@ -2744,6 +2744,9 @@ let GameClient = module.exports = (function(){
 
 		if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
 			Fury.Input.requestPointerLock();
+			if (!document.fullscreenElement) {
+				glCanvas.requestFullscreen();
+			}
 		}
 
 		// Update Players
@@ -3831,10 +3834,10 @@ let Maths = require('../../../Fury/src/maths');
 let vec3 = Maths.vec3;
 
 let TeleporterControlVisuals = module.exports = (function() {
-  let exports = {};
-  let prototype =  {};
+	let exports = {};
+	let prototype =  {};
 
-  exports.create = (params) => {
+	exports.create = (params) => {
 		let WorldVisuals = params.worldVisuals; // I dont' know what's up with require but it wasn't working so passing it manually :shrug:
 			// expected: interactable (of type teleporter control), scene
 			let visuals = Object.create(prototype);
@@ -3870,6 +3873,9 @@ let TeleporterControlVisuals = module.exports = (function() {
 
 			visuals.indicators = [];
 			let position = vec3.clone(interactable.bounds.min);
+			// This is a horrible hack, visual position you changes the interaction bounds
+			vec3.add(position, position, Maths.vec3X);
+			vec3.add(position, position, Maths.vec3Z);
 			vec3.add(position, position, Maths.vec3Y);
 			vec3.scaleAndAdd(position, position, Maths.vec3Z, -0.9);
 			vec3.scaleAndAdd(position, position, Maths.vec3X, 0.1);
@@ -3881,40 +3887,40 @@ let TeleporterControlVisuals = module.exports = (function() {
 			visuals.indicators.push(params.scene.add({ mesh: WorldVisuals.indicatorMesh, material: material, position: position2 }));
 		}
 
-    visuals.onmessage = (message) => {
-        switch(message) {
-          case "init":  // Valid for all interactable visuals
-            // State was non-standard on connect, update for teleporter state
-            console.log("Init called on control visuals");
-            // TODO: notify interactable.teleporter as to powered state
-            break;
-          case "powered":
-            // Was not powered has become powered
-            console.log("Control is now powered");
-            break;
-          case "took_core":
-            // Took core but still needs more
-            console.log("Thank you for your donation");
-            break;
-          case "invalid_core":
-            // Tried to give the control a core it didn't need
-            console.log("I don't want that one");
-            break;
-          case "unpowered":
-            // Tried to interact with control with no core
-            console.log("I need more power cores");
-            break;
-          case "already_powered":
-            // Tried to interacted with control when already powered
-            console.log("I'm all good thanks!");
-            break;
-        }
-    }
+		visuals.onmessage = (message) => {
+				switch(message) {
+					case "init":  // Valid for all interactable visuals
+						// State was non-standard on connect, update for teleporter state
+						console.log("Init called on control visuals");
+						// TODO: notify interactable.teleporter as to powered state
+						break;
+					case "powered":
+						// Was not powered has become powered
+						console.log("Control is now powered");
+						break;
+					case "took_core":
+						// Took core but still needs more
+						console.log("Thank you for your donation");
+						break;
+					case "invalid_core":
+						// Tried to give the control a core it didn't need
+						console.log("I don't want that one");
+						break;
+					case "unpowered":
+						// Tried to interact with control with no core
+						console.log("I need more power cores");
+						break;
+					case "already_powered":
+						// Tried to interacted with control when already powered
+						console.log("I'm all good thanks!");
+						break;
+				}
+		}
 
-    return visuals;
-  };
+		return visuals;
+	};
 
-  return exports;
+	return exports;
 })();
 
 },{"../../../Fury/src/maths":8}],25:[function(require,module,exports){
@@ -4428,44 +4434,54 @@ let GameServer = module.exports = (function() {
 				// and distribute
 				let position = globalState.players[id].position;
 				// Look for interactable at player position
+				let closestInteractable = null;
+				let minSqrDistance = Number.MAX_VALUE;
 				for (let i = 0, l = world.interactables.length; i < l; i++) {
 					let interactable = world.interactables[i];
 					if (interactable.canInteract(position)) {
-						// Interact!
-						let heldPickupState = getHeldPickup(id);
-						let heldPickup = null;
-						if (heldPickupState) {
-							heldPickup = world.getPickup(heldPickupState.id);
+						let sqrDistance = Maths.vec3.squaredDistance(position, interactable.position);
+						if (sqrDistance < minSqrDistance) {
+							minSqrDistance = sqrDistance;
+							closestInteractable = interactable;
 						}
-						let result = interactable.interact(heldPickup);
-						if (result && result.length) {
-							// Update world object (will want to do this on client too)
-							heldPickup.enabled = false;
-							Maths.vec3.copy(heldPickup.position, result);
-							// Don't have server side player objects so don't need to explicitly
-							// set player.heldItem to null, updating the heldPickupState does that
-
-							// Update global state
-							heldPickupState.owner = null;
-							heldPickupState.position = cloneArray3(result);
-							setInteractableGlobalState(id, interactable.id, interactable.power);
-
-							// Set message pickup id
-							message.pickupId = heldPickup.id
-						} else if (result) {
-							result.enabled = false;
-							setPickupGlobalState(id, result.id, id);
-							setInteractableGlobalState(id, interactable.id, interactable.power);
-						}
-
-						// If we expand what interactables can do, e.g. just switches
-						// need to respond to state change here and put it in global state
-
-						message.id = id;
-						message.interactableId = interactable.id;
-						distributeMessage(id, -1, message);
-						break;
 					}
+				}
+
+				if (closestInteractable != null) {
+					let interactable = closestInteractable;
+					// Interact!
+					let heldPickupState = getHeldPickup(id);
+					let heldPickup = null;
+					if (heldPickupState) {
+						heldPickup = world.getPickup(heldPickupState.id);
+					}
+					let result = interactable.interact(heldPickup);
+					if (result && result.length) {
+						// Update world object (will want to do this on client too)
+						heldPickup.enabled = false;
+						Maths.vec3.copy(heldPickup.position, result);
+						// Don't have server side player objects so don't need to explicitly
+						// set player.heldItem to null, updating the heldPickupState does that
+
+						// Update global state
+						heldPickupState.owner = null;
+						heldPickupState.position = cloneArray3(result);
+						setInteractableGlobalState(id, interactable.id, interactable.power);
+
+						// Set message pickup id
+						message.pickupId = heldPickup.id
+					} else if (result) {
+						result.enabled = false;
+						setPickupGlobalState(id, result.id, id);
+						setInteractableGlobalState(id, interactable.id, interactable.power);
+					}
+
+					// If we expand what interactables can do, e.g. just switches
+					// need to respond to state change here and put it in global state
+
+					message.id = id;
+					message.interactableId = interactable.id;
+					distributeMessage(id, -1, message);
 				}
 				break;
 			case MessageType.POSITION:  // This is more a player transform / input sync
@@ -4802,6 +4818,7 @@ let Interactable = module.exports = (function() {
 		let max = vec3.create();
 		vec3.add(max, min, size);
 		interactable.bounds = Bounds.create({ min: min, max: max });
+		interactable.position = vec3.clone(interactable.bounds.center);	// TODO: Provide actual position rather than bounds center
 
 		// Append interact method
 		switch(params.type) {
@@ -5813,7 +5830,8 @@ let World = module.exports = (function() {
 			let control = Interactable.create({
 				id: id,
 				type: Interactable.Type.TELEPORTER_CONTROL,
-				min: vec3.fromValues(x,y,z+1), // default size 1,2,1
+				min: vec3.fromValues(x-1,y,z), // default size 1,2,1
+				size: vec3.fromValues(3,2,3),
 				teleporter: teleporter,
 				powerRequirements: powerRequirements
 			});

@@ -152,7 +152,8 @@ let World = module.exports = (function() {
 			let control = Interactable.create({
 				id: id,
 				type: Interactable.Type.TELEPORTER_CONTROL,
-				min: vec3.fromValues(x,y,z+1), // default size 1,2,1
+				min: vec3.fromValues(x-1,y,z), // default size 1,2,1
+				size: vec3.fromValues(3,2,3),
 				teleporter: teleporter,
 				powerRequirements: powerRequirements
 			});
