@@ -163,9 +163,10 @@ let GameServer = module.exports = (function() {
 
 				// Check for teleporter collision
 				let shouldTeleport = false;
+				let teleporter = null;
 				if (hasPositionChanged) {
 					for (let i = 0, l = world.teleporters.length; i < l; i++) {
-						let teleporter = world.teleporters[i];
+						teleporter = world.teleporters[i];
 						// Ideally would have player concept on server now and could use it's AABB
 						if (teleporter.enabled && Bounds.contains(message.position, teleporter.bounds)) {
 							shouldTeleport = true;
@@ -181,6 +182,13 @@ let GameServer = module.exports = (function() {
 
 				// Message all others if no teleport, return message to sender as well as other players if teleporting
 				if (shouldTeleport) {
+					/* TODO: Enable once we track progression and only set for *first* player to teleport not any player to teleport 
+					if (teleporter.isProgression && teleporter.target != undefined && telepoter.target != null) {
+						// We've progressed the puzzle! change the initial spawn point
+						// TODO: This isn't replicated on the client world structure, to do so we'd need to use a Teleport message instead
+						// It's not essential that it's on the client, yet, but if we want to clean up old sections later we might need it then
+						Maths.vec3.copy(world.initialSpawnPosition, teleporter.targetPosition);
+					}*/
 					// Distribute to everyone
 					distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
 				} else {

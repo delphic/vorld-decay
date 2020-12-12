@@ -52,30 +52,32 @@ let PuzzleGenerator = module.exports = (function() {
 	 	//	{ teleporters: [{ powerRequirements: [1], target: 2 }, { powerRequirements: [0, 1, 1], isProgression: true }], cores: [ 1 ] },
 		// { teleporters: [{ powerRequirements: [1], target: 0 }], cores: [ 1, 1 ] }]
 
+		// NOTE: Changed startIndex to array to allow for chaining of loops
+
 		// Enough theory crafting, lets ignore more than one level of nesting code for now
 		// First Test - nesting level 0, length 1
-		// let input = { start: 0, units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
+		// let input = { start: [0], units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
 		// Second Test - nesting level 1, length 3
 		/*
-		let input = { start: 1, units: [
+		let input = { start: [1], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 		 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
 		};*/
 		// Third Test - nesting level 1, length 3, shared exit resource
-		/*let input = { start: 1, units: [
+		/*let input = { start: [1], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
 		};*/
 		// Fourth Test - recreate original test!
-		/*let input = { start: 3, units: [
+		/*let input = { start: [3], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,1,1], exitLocations: [0], keyLocations:[0], keyLocationOffsets: [0] },
 			{ exitPower: [0,1], exitLocations: [0], keyLocations: [1], keyLocationOffsets: [0], units: [0,1,2] }
 		] };*/
 		// Fifth Test - the double loop, works with overlapCount: 1-> 3, although 3 is just like a troll move
-		let input = {
-			start: 2, units: [
+		/*let input = {
+			start: [2], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,1,0,1], exitLocations: [1], keyLocations: [2], keyLocationOffsets:[0], units: [0,0,0],
@@ -83,9 +85,15 @@ let PuzzleGenerator = module.exports = (function() {
 				// overlap with unit 3, room 0 of unit 3 is room 2 of this unit, the key for exitpower index 4 should be in room 2 of overlap unit
 			{ keyLocations: [2], keyLocationOffsets: [0], units: [1,1,1] } // Doesn't need an exit because it's can overlap unit
 			]
-		};
-
-		let startUnit = input.units[input.start];
+		};*/
+		// Sixth Test - chaining teleporters - start with green room, then yellow room, then test #3
+		let input = { start: [1, 2, 3], units: [
+			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+			{ exitPower: [0,0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+			{ exitPower: [0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
+		}
+		// Seventh Text - chain loops - Fourth Test into Fifth Test
 
 		let createRoom = function(roomUnit, isProgression, target) {
 			let room = { teleporters: [], cores: [0,0,0,0] };
@@ -111,40 +119,25 @@ let PuzzleGenerator = module.exports = (function() {
 			return teleporter
 		};
 
-		// https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
-		let shuffleArray = function(array) {
-			let currentIndex = array.length, temp, randomIndex;
-			while (0 !== currentIndex) {
-				randomIndex = Math.floor(Math.random() * currentIndex);
-				currentIndex -= 1;
-				temp = array[currentIndex];
-				array[currentIndex] = array[randomIndex];
-				array[randomIndex] = temp;
-			}
-			return array;
-		};
-
-		let output = { start: 0, rooms: [] };
-		if (!startUnit.units || !startUnit.units.length) {
-			// Single length just create a room
-			output.rooms.push(createRoom(startUnit, true));
-		} else {
-			// Recurve into units
-			let roomIndexOffset = 0;	// TOO: Add to this if you needed to run multiple times or recurse
-			let outputRooms = output.rooms;
+		// Creates a loop from specified startIndex
+		let createUnitLoop = function(input, output, startIndex, roomIndexOffset) {
+			// Assumed nesting level of 1 - i.e. the units of this unit are themselves rooms
 			let nestingLevel = 1;	// TODO: Support more than one please! I guess we should calculate ?
+			let outputRooms = output.rooms;
+			let startUnit = input.units[startIndex];
 
 			// NOTE: using output.rooms to mean rooms for this unit, which would not be true with further nesting
 			// Also some of the maths likely wouldn't work
 			for (let i = 0, l = startUnit.units.length; i < l; i++) {
 				// NOTE: Assuming these units are rooms, which is not valid but one step at a time kay
-				outputRooms.push(createRoom(input.units[startUnit.units[i]], false, (i + 1) % l));
+				outputRooms.push(createRoom(input.units[startUnit.units[i]], false, roomIndexOffset + ((i + 1) % l)));
 			}
 			let unitRoomCount = outputRooms.length - roomIndexOffset;
 			let exitRoomIndex = roomIndexOffset + (startUnit.exitLocations[0] % unitRoomCount);	// Additional array entries would be used for further nesting
 
 			// Add exit teleporter
-			outputRooms[exitRoomIndex].teleporters.push(createTeleporter(startUnit.exitPower, true));
+			let exitTeleporter = createTeleporter(startUnit.exitPower, true);
+			outputRooms[exitRoomIndex].teleporters.push(exitTeleporter);
 
 			let overlapRoomCount = 0;
 			if (startUnit.hasOwnProperty("overlap")) {
@@ -224,6 +217,51 @@ let PuzzleGenerator = module.exports = (function() {
 
 			// Now shuffle swap teleporter positions extra random!
 			shuffleArray(outputRooms[exitRoomIndex].teleporters);
+
+			// Return exit teleporter so we can add the target room to later
+			return exitTeleporter;
+		};
+
+		// https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+		let shuffleArray = function(array) {
+			let currentIndex = array.length, temp, randomIndex;
+			while (0 !== currentIndex) {
+				randomIndex = Math.floor(Math.random() * currentIndex);
+				currentIndex -= 1;
+				temp = array[currentIndex];
+				array[currentIndex] = array[randomIndex];
+				array[randomIndex] = temp;
+			}
+			return array;
+		};
+
+		let startRoomIndicies = []; // unitIndex -> start room index
+		let exitTeleporters = []; // unitIndex -> exit teleporter
+
+		let output = { start: 0, rooms: [] };
+		for (let i = 0, l = input.start.length; i < l; i++) {
+			let startUnitIndex = input.start[i];
+			let startUnit = input.units[startUnitIndex];
+
+			// Next added room will be start index for this unit
+			startRoomIndicies[startUnitIndex] = output.rooms.length;
+
+			if (!startUnit.units || !startUnit.units.length) {
+				let room = createRoom(startUnit, true);
+				exitTeleporters[startUnitIndex] = room.teleporters[0];	// Only one teleporter in this room!
+				output.rooms.push(room);
+			} else {
+				exitTeleporters[startUnitIndex] = createUnitLoop(input, output, startUnitIndex, output.rooms.length);
+			}
+		}
+
+		// Now go back through and add targets to exit teleporters
+		for (let i = 0, l = input.start.length - 1; i < l; i++) {
+			let unitIndex = input.start[i];
+			let targetUnitIndex = input.start[i+1];
+			let targetRoomIndex = startRoomIndicies[targetUnitIndex];
+			let exitTeleporter = exitTeleporters[unitIndex];
+			exitTeleporter.target = targetRoomIndex;
 		}
 
 		return output;

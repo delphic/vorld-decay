@@ -273,7 +273,9 @@ let World = module.exports = (function() {
 				// Create Teleporters
 				for (let j = 0, n = teleporters.length; j < n; j++) {
 					let teleportPosition = vec3.fromValues(0,1,-1);
-					if (teleporters[j].isProgression) {
+					let isWin = teleporters[j].isProgression && (teleporters[j].target == undefined || teleporters[j].target == null);
+
+					if (isWin) {
 						vec3.copy(teleportPosition, exitPosition);
 					} else {
 						let targetRoom = teleporters[j].target;
@@ -281,10 +283,9 @@ let World = module.exports = (function() {
 					}
 					let teleporter = createTeleporter(roomOffset[0] + j * 7 + 2, roomOffset[1], roomOffset[2] - roomDepth + 2, teleportPosition, targetRotation);
 
-					// TEMP: HACK only one puzzle
 					if (teleporters[j].isProgression) {
-						teleporter.win = true;
 						teleporter.isProgression = true;
+						teleporter.win = isWin;
 					}
 
 					let panelsNeeded = 0;
