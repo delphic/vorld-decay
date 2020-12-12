@@ -4264,29 +4264,91 @@ let GameServer = module.exports = (function() {
 
 	// Format is (idToSendTo, objectToSend) for message
 	// Format is (idToExclude, objectToSend) for distribute (-1 sends to all)
+	// Updated Format is (playerId, idToExclude, objectToSend) for distribute (-1 sends to all in same world)
 	let sendMessage, distributeMessage;
 
-	// This is information which needs to be sent on client connection
-	// Holds DTOs, rather than actual world objects, might be good to call
-	// them as such and have classes for them
-	let globalState = {
-		players: [],
-		pickups: [],
-		interactables: []  // network interactables power state
+	let ServerWorldInstance = (function(){
+		let exports = {};
+		exports.create = function() {
+
+			let instance = {};
+			instance.connectionCount = 0;
+			instance.isComplete = false;
+			instance.globalState = {
+				players: [],
+				pickups: [],
+				interactables: []  // network interactables power state
+			};
+
+			instance.world = World.create();
+
+			let level = PuzzleGenerator.create();
+			instance.globalState.level = level;
+			instance.world.createLevel(level);
+
+			return instance;
+		};
+		return exports;
+	})();
+
+	let worldInstances = [];
+	let idToInstance = {};
+
+	let assignToWorldInstance = (id) => {
+		let instanceIndex = -1;
+		let firstEmptyInstanceIndex = -1;
+		for (let i = 0, l = worldInstances.length; i < l; i++) {
+			if (firstEmptyInstanceIndex == -1 && (worldInstances[i] == null || worldInstances[i] == undefined)) {
+				firstEmptyInstanceIndex = i;
+			}
+			if (worldInstances[i] && !worldInstances[i].isComplete) {
+				instanceIndex = i;
+				break;
+			}
+		}
+		if (instanceIndex == -1) {
+			// No instances create a new one!
+			if (firstEmptyInstanceIndex != -1) {
+				instanceIndex = firstEmptyInstanceIndex;
+				worldInstances[firstEmptyInstanceIndex] = ServerWorldInstance.create();
+			} else {
+				instanceIndex = worldInstances.push(ServerWorldInstance.create()) - 1;
+			}
+		}
+		idToInstance[id] = instanceIndex;
+		worldInstances[instanceIndex].connectionCount += 1;
 	};
-	let world = World.create();
+
+	let getGlobalState = (id) => {
+		return worldInstances[idToInstance[id]].globalState;
+	};
+
+	let getWorld = (id) => {
+		return worldInstances[idToInstance[id]].world;
+	};
+
+	let getServerWorldInstance = (id) => {
+		return worldInstances[idToInstance[id]];
+	};
 
 	exports.init = (sendDelegate, distributeDelegate) => {
 		sendMessage = sendDelegate;
-		distributeMessage = distributeDelegate;
-		/* globalState.level = "debug"; */
-		let level = PuzzleGenerator.create();
-		globalState.level = level;
-		world.createLevel(level);
+		// Own distribute - only send to players in same world
+		distributeMessage = (playerId, excludeId, message) => {
+			let players = getGlobalState(playerId).players;
+			for (let i = 0, l = players.length; i < l; i++) {
+				if (players[i] !== undefined && players[i] !== null && players[i].id != excludeId) {
+					sendMessage(players[i].id, message);
+					// On server this'll repeat stringify which isn't great, a send with predicate might be cute
+					// or a send to array of ids, but it's fine for now
+				}
+			}
+		};
 	};
 
 	exports.onclientconnect = (id) => {
-		sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: globalState });
+		assignToWorldInstance(id);
+		sendMessage(id, { type: MessageType.ACKNOWLEDGE, id: id, data: getGlobalState(id) });
 	};
 
 	let positionCache = [0,0,0];
@@ -4318,12 +4380,16 @@ let GameServer = module.exports = (function() {
 	};
 
 	exports.onmessage = (id, message) => {
+		// Adjust for instance
+		let globalState = getGlobalState(id);
+		let world = getWorld(id);
+
 		switch(message.type) {
 			case MessageType.GREET:
 				let nick = message.nick;
 				if (!nick) nick = "Player " + (id + 1);
 				globalState.players[id] = { id: id, nick: nick, position: cloneArray3(world.initialSpawnPosition), rotation: [0,0,0,1] };
-				distributeMessage(-1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
+				distributeMessage(id, -1, { type: MessageType.CONNECTED, id: id, player: globalState.players[id] });
 				break;
 			case MessageType.PICKUP:
 				// Expect position, run through pickups and try to pickup
@@ -4344,8 +4410,8 @@ let GameServer = module.exports = (function() {
 
 					if (closestPickup) {
 						closestPickup.enabled = false;
-						setPickupGlobalState(closestPickup.id, id);
-						distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: closestPickup.id });
+						setPickupGlobalState(id, closestPickup.id, id);
+						distributeMessage(id, -1, { id: id, type: MessageType.PICKUP, pickupId: closestPickup.id });
 					}
 				}
 				break;
@@ -4354,7 +4420,7 @@ let GameServer = module.exports = (function() {
 				if (isHoldingPickup(id)) {
 					dropPickups(id, message.position); // Currently just drops all pickups
 					message.id = id;
-					distributeMessage(-1, message);
+					distributeMessage(id, -1, message);
 				}
 				break;
 			case MessageType.INTERACT:
@@ -4382,14 +4448,14 @@ let GameServer = module.exports = (function() {
 							// Update global state
 							heldPickupState.owner = null;
 							heldPickupState.position = cloneArray3(result);
-							setInteractableGlobalState(interactable.id, interactable.power);
+							setInteractableGlobalState(id, interactable.id, interactable.power);
 
 							// Set message pickup id
 							message.pickupId = heldPickup.id
 						} else if (result) {
 							result.enabled = false;
-							setPickupGlobalState(result.id, id);
-							setInteractableGlobalState(interactable.id, interactable.power);
+							setPickupGlobalState(id, result.id, id);
+							setInteractableGlobalState(id, interactable.id, interactable.power);
 						}
 
 						// If we expand what interactables can do, e.g. just switches
@@ -4397,7 +4463,7 @@ let GameServer = module.exports = (function() {
 
 						message.id = id;
 						message.interactableId = interactable.id;
-						distributeMessage(-1, message);
+						distributeMessage(id, -1, message);
 						break;
 					}
 				}
@@ -4432,7 +4498,11 @@ let GameServer = module.exports = (function() {
 
 				// Message all others if no teleport, return message to sender as well as other players if teleporting
 				if (shouldTeleport) {
-					/* TODO: Enable once we track progression and only set for *first* player to teleport not any player to teleport 
+					if (message.win) {
+						// This world has been completed mark it as such so new players don't join
+						getServerWorldInstance(id).isComplete = true;
+					}
+					/* TODO: Enable once we track progression and only set for *first* player to teleport not any player to teleport
 					if (teleporter.isProgression && teleporter.target != undefined && telepoter.target != null) {
 						// We've progressed the puzzle! change the initial spawn point
 						// TODO: This isn't replicated on the client world structure, to do so we'd need to use a Teleport message instead
@@ -4440,10 +4510,10 @@ let GameServer = module.exports = (function() {
 						Maths.vec3.copy(world.initialSpawnPosition, teleporter.targetPosition);
 					}*/
 					// Distribute to everyone
-					distributeMessage(-1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
+					distributeMessage(id, -1, message); // TODO: Relevancy / Spacial Parititioning plz (players in target section + players in correct section + self)
 				} else {
 					// Distribute to other players
-					distributeMessage(id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
+					distributeMessage(id, id, message); // TODO: Relevancy / Spacial Partitioning plz (players in same section only)
 				}
 
 				// Check for auto-pickups
@@ -4453,20 +4523,24 @@ let GameServer = module.exports = (function() {
 						if (pickup.autoPickup && pickup.canPickup(message.position)) {
 							// This player should pickup the object!
 							pickup.enabled = false;
-							setPickupGlobalState(pickup.id, id);
-							distributeMessage(-1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
+							setPickupGlobalState(id, pickup.id, id);
+							distributeMessage(id, -1, { id: id, type: MessageType.PICKUP, pickupId: pickup.id });
 						}
 					}
 				}
 				break;
 			default:
 				message.id = id;
-				distributeMessage(id, message);
+				distributeMessage(id, id, message);
 				break;
 		}
 	};
 
-	let setPickupGlobalState = (id, owner, position) => {
+	// Ideally we'd move these methods to server world instance but it's less typing
+	// to just set a local variable based on playerId, and make sure we pass that
+
+	let setPickupGlobalState = (playerId, id, owner, position) => {
+		let globalState = getGlobalState(playerId);
 		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
 			if (globalState.pickups[i].id == id) {
 				globalState.pickups[i].owner = owner;
@@ -4489,7 +4563,8 @@ let GameServer = module.exports = (function() {
 		});
 	};
 
-	let setInteractableGlobalState = (id, power) => {
+	let setInteractableGlobalState = (playerId, id, power) => {
+		let globalState = getGlobalState(playerId);
 		for (let i = 0, l = globalState.interactables.length; i < l; i++) {
 			if (globalState.interactables[i].id == id) {
 				globalState.interactables[i].power = power.slice();
@@ -4500,6 +4575,7 @@ let GameServer = module.exports = (function() {
 	};
 
 	let isHoldingPickup = (playerId) => {
+		let globalState = getGlobalState(playerId);
 		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
 			if (globalState.pickups[i].owner == playerId) {
 				return true;
@@ -4509,6 +4585,7 @@ let GameServer = module.exports = (function() {
 	};
 
 	let getHeldPickup = (playerId) => {
+		let globalState = getGlobalState(playerId);
 		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
 			if (globalState.pickups[i].owner == playerId) {
 				return globalState.pickups[i];
@@ -4517,12 +4594,14 @@ let GameServer = module.exports = (function() {
 		return null;
 	};
 
-	let dropPickups = (id, dropPosition) => {
+	let dropPickups = (playerId, dropPosition) => {
+		let globalState = getGlobalState(playerId);
+		let world = getWorld(playerId);
 		for (let i = 0, l = globalState.pickups.length; i < l; i++) {
-			if (globalState.pickups[i].owner == id) {
+			if (globalState.pickups[i].owner == playerId) {
 				if (!dropPosition) {
 					// TODO: Calculate from player position and rotation and drop slightly in front
-					dropPosition = globalState.players[id].position;
+					dropPosition = globalState.players[playerId].position;
 				}
 				// re-enable world pickup
 				let pickup = world.getPickup(globalState.pickups[i].id);
@@ -4539,11 +4618,19 @@ let GameServer = module.exports = (function() {
 	};
 
 	exports.onclientdisconnect = (id) => {
+		let globalState = getGlobalState(id);
 		// Only report disconnection of players which have sent greet
 		if (globalState.players[id]) {
 			dropPickups(id);  // Drop any owned pickups
 			globalState.players[id] = null; // Remove from state
-			distributeMessage(id, { type: MessageType.DISCONNECTED, id: id });
+			distributeMessage(id, id, { type: MessageType.DISCONNECTED, id: id });
+		}
+		let worldInstanceIndex = idToInstance[id];
+		let worldInstance = worldInstances[worldInstanceIndex];
+		worldInstance.connectionCount -= 1;
+		if (worldInstance.connectionCount <= 0) {
+			// Everyone has left, kill it
+			worldInstances[worldInstanceIndex] = null;
 		}
 	};
 
@@ -5934,7 +6021,7 @@ let World = module.exports = (function() {
 			}
 		};
 
-		world.createLevel = (level) => {
+		world.createLevel = (level) => {	// This multi-class could have performance impact but it's not a hot fn so it's probably fine
 			if (typeof level == "string") {
 				createNamedLevel(level);
 			} else {
