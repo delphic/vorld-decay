@@ -2702,6 +2702,7 @@ let WorldVisuals = require('./world-visuals');
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
 
 let gameStarted = false;
+// HACK: Global for notifying game start - should attach a listener
 gameStart = function() {
 	gameStarted = true;
 };
@@ -2789,7 +2790,7 @@ let GameClient = module.exports = (function(){
 			lastNetSendTime = time;
 		}
 
-		if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+		if (localPlayer && gameStarted && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
 			Fury.Input.requestPointerLock();
 			/* Full Screen - probably want a
 			if (!document.fullscreenElement) {
