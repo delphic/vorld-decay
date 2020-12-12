@@ -360,7 +360,7 @@ let World = module.exports = (function() {
 			}
 		};
 
-		world.createLevel = (level) => {
+		world.createLevel = (level) => {	// This multi-class could have performance impact but it's not a hot fn so it's probably fine
 			if (typeof level == "string") {
 				createNamedLevel(level);
 			} else {
