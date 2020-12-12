@@ -2163,7 +2163,7 @@ var Transform = module.exports = function() {
 },{"./maths":8}],16:[function(require,module,exports){
 let CloseCode = require('./common/websocket-close-codes');
 
-let isLocalHost = true; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
+let isLocalHost = false; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
 let acknowledged = false; // Acknowledged by websocket server
 
 let Connection = require('./client/connection');
@@ -5093,6 +5093,9 @@ let PuzzleGenerator = module.exports = (function() {
 				// Might be nice to have explicit weights (rather than repeating the same puzzle in the array)
 			}
 		}
+
+		// NOTE: There's very little variation in loop length and you can see the cyclic symetry, so might be worth putting in some variations that break up the cyclic symmetry as well
+		// as some loops of length 2 (although probably not 4 as that doesn't really add anything interesting other than confusing the player, but maybe that's the hard mode :D)
 
 		return buildChain(puzzles, true);
 	};
