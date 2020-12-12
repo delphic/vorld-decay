@@ -84,7 +84,7 @@ let Player = module.exports = (function() {
     	}
 
       // Pickup / Use Input
-      if (Fury.Input.keyDown("e", true)) {	// TODO: or mouse down this frame
+      if (Fury.Input.keyDown("e", true) || Fury.Input.mouseDown(0, true)) {
         player.requestPickup = true;
       }
       if (Fury.Input.keyDown("g", true)) {
