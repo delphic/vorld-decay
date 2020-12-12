@@ -15,69 +15,74 @@
 let PuzzleGenerator = module.exports = (function() {
 	let exports = {};
 
-	// This outputs a unit with an exit teleporter
-	exports.create = function() {
-		// Note: color indices: [ red, blue, yellow, green ]
-		// Input # 1:
-		// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] units: [] } ],
-		// start: 0 }
-		// is a single room with a red teleporter and red power core (no keyLocation or exitColor => no power requirements)
-		// exiting this room increases progression
+	// Topology Format:
+	// Note: color indices: [ red, blue, yellow, green ]
+	// Input # 1:
+	// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] units: [] } ],
+	// start: 0 }
+	// is a single room with a red teleporter and red power core (no keyLocation or exitColor => no power requirements)
+	// exiting this room increases progression
 
-		// Input #2
-		// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
-		// 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets[1,0], units: [0,0,0] } ],
-		// start: 1}
-		// is 3 rooms in a loop using red to tranverse, second room contains a blue/yellow teleporter, third room contains a blue core and first a yellow
-		// exiting the second room via the blue/yellow teleporter increases progression
+	// Input #2
+	// { units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+	// 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets[1,0], units: [0,0,0] } ],
+	// start: 1}
+	// is 3 rooms in a loop using red to tranverse, second room contains a blue/yellow teleporter, third room contains a blue core and first a yellow
+	// exiting the second room via the blue/yellow teleporter increases progression
 
-		// In order to nest units further, need to improve key and exitLocation specification (have to pick a room location ultimately not a unit location)
-			// Can we just use an array? and it uses the nesting depth % units.length
-		// In order to support multiple power cores need we to improve exitPower - can use an array
-			// Also effects keyLocations - we could just do (nesting depth + keyLocationOffsets[colorIndex]) % units.length
-		// In order to share room instances need something more than definition indices, as each implies a new room atm.
-			// Would adding "overlap: unitIndex, unitOverlaps: [0]"	- Work?
-				// Well for this depth yes, but for more nesting no, and it doesn't help us put the keyLocation into the other unit
-					// If we index into room instead of unit, and then build rooms of the overlap... maybe we could place the key in the overlap?
+	// In order to nest units further, need to improve key and exitLocation specification (have to pick a room location ultimately not a unit location)
+		// Can we just use an array? and it uses the nesting depth % units.length
+	// In order to support multiple power cores need we to improve exitPower - can use an array
+		// Also effects keyLocations - we could just do (nesting depth + keyLocationOffsets[colorIndex]) % units.length
+	// In order to share room instances need something more than definition indices, as each implies a new room atm.
+		// Would adding "overlap: unitIndex, unitOverlaps: [0]"	- Work?
+			// Well for this depth yes, but for more nesting no, and it doesn't help us put the keyLocation into the other unit
+				// If we index into room instead of unit, and then build rooms of the overlap... maybe we could place the key in the overlap?
 
-		// NOTE: Logic for when unlock key matches core already in the room from a lower layer, don't need to add it elsewere
-		// E.g. if exitPower for units[1] in Input #2, was [1,1]  we won't need to add the first core (0) anywhere because units[1].units[units[1].exitlocations[0]].exitPower[0] >= units[1].exitPower[0]
-		// where units[1].exitLocations[0] is the room with the exit teleporter, if it was nested we'd need to drill down till we knew the room index
-		// where we're checking [...]exitPower[0] >= units[1].exitPower[0] could swap those 0s as colorIndex and perform the check for all
+	// NOTE: Logic for when unlock key matches core already in the room from a lower layer, don't need to add it elsewere
+	// E.g. if exitPower for units[1] in Input #2, was [1,1]  we won't need to add the first core (0) anywhere because units[1].units[units[1].exitlocations[0]].exitPower[0] >= units[1].exitPower[0]
+	// where units[1].exitLocations[0] is the room with the exit teleporter, if it was nested we'd need to drill down till we knew the room index
+	// where we're checking [...]exitPower[0] >= units[1].exitPower[0] could swap those 0s as colorIndex and perform the check for all
 
-		// Output #1
-		// rooms: [ { telporters: [{ powerRequirements: [1], isProgression: true }], cores: [ 1 ]  }]
-		// Output #2
-		// rooms: [ { teleporters: [{ powerRequirements: [1], target: 1 }], cores: [ 1, 0, 1 ] },
-	 	//	{ teleporters: [{ powerRequirements: [1], target: 2 }, { powerRequirements: [0, 1, 1], isProgression: true }], cores: [ 1 ] },
-		// { teleporters: [{ powerRequirements: [1], target: 0 }], cores: [ 1, 1 ] }]
+	// Output #1
+	// rooms: [ { telporters: [{ powerRequirements: [1], isProgression: true }], cores: [ 1 ]  }]
+	// Output #2
+	// rooms: [ { teleporters: [{ powerRequirements: [1], target: 1 }], cores: [ 1, 0, 1 ] },
+	//	{ teleporters: [{ powerRequirements: [1], target: 2 }, { powerRequirements: [0, 1, 1], isProgression: true }], cores: [ 1 ] },
+	// { teleporters: [{ powerRequirements: [1], target: 0 }], cores: [ 1, 1 ] }]
 
-		// NOTE: Changed startIndex to array to allow for chaining of loops
+	// NOTE: Changed startIndex to array to allow for chaining of loops
 
-		// Enough theory crafting, lets ignore more than one level of nesting code for now
-		// First Test - nesting level 0, length 1
-		// let input = { start: [0], units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0], units: [] } ] };
-		// Second Test - nesting level 1, length 3
-		/*
-		let input = { start: [1], units: [
+	// This outputs a chain of puzzles each with an exit teleporter
+	// Currently supports rooms, loops of rooms, overlapping loops of rooms
+	// Does not yet support loops of loops of rooms, or overlapping loops of loops (I'm not even sure what that would look like).
+	let Puzzles = {
+		// It's just a room (exit: red)
+		"Room": { start: [0], units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] } ] },
+		// Loop of 3 of one type of room (loop color: red, exit: blue, yellow)
+		"SimpleLoop": {
+			start: [1], units: [
+				{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		 		{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] }
+			]
+		},
+		// Loop of 3 of one type of room, but exit color is sharead (loop color: red, exit: red, blue)
+		"SimpleSharedColorLoop": { start: [1], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
-		 	{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
-		};*/
-		// Third Test - nesting level 1, length 3, shared exit resource
-		/*let input = { start: [1], units: [
-			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
-		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
-		};*/
-		// Fourth Test - recreate original test!
-		/*let input = { start: [3], units: [
+		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ]
+		},
+		// Original test, makes use of all the colours, exit in first room, key in second, multiple colors in third (loop color: all but blue, exit: blue )
+		// Added exit requirement red to prevent carry forward issue
+		// ^^ If colour was shared with mixed loop colors, presumably is it possible to set key in room that doesn't need it but is the loop color for the room with the exit, then you have more than you need?
+		// I think this doesn't happen, I think it sees that the room already has the core so doesn't add it? But could this cause a problem if you changed loop colors?
+		"MixedColorLoop": { start: [3], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,1,1], exitLocations: [0], keyLocations:[0], keyLocationOffsets: [0] },
-			{ exitPower: [0,1], exitLocations: [0], keyLocations: [1], keyLocationOffsets: [0], units: [0,1,2] }
-		] };*/
-		// Fifth Test - the double loop, works with overlapCount: 1-> 3, although 3 is just like a troll move
-		/*let input = {
-			start: [2], units: [
+			{ exitPower: [1,1], exitLocations: [0], keyLocations: [1], keyLocationOffsets: [0], units: [0,1,2] } ]	// Have just make this require red too and we don't get carry forward issue
+		},
+		// Pair of Overlaping Loops (overlap count 1 - works with 2 and 3 but 3 is basically just trolling w/ superfluous teleporters)
+		"OverlappingLoops": { start: [2], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,1,0,1], exitLocations: [1], keyLocations: [2], keyLocationOffsets:[0], units: [0,0,0],
@@ -85,16 +90,16 @@ let PuzzleGenerator = module.exports = (function() {
 				// overlap with unit 3, room 0 of unit 3 is room 2 of this unit, the key for exitpower index 4 should be in room 2 of overlap unit
 			{ keyLocations: [2], keyLocationOffsets: [0], units: [1,1,1] } // Doesn't need an exit because it's can overlap unit
 			]
-		};*/
-		// Sixth Test - chaining teleporters - start with green room, then yellow room, then test #3
-		/*let input = { start: [1, 2, 3], units: [
+		},
+		// Green room -> Yellow Room -> Loop of Red Rooms w/ Blue Exit
+		"SimpleChain": { start: [1, 2, 3], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
-		};*/
-		// Seventh Text - chain loops - Fourth Test into Fifth Test
-		let input = { start: [3, 6], units: [
+		},
+		// MixedColorLoop -> OverlappingLoops (can take a red forward from mixed color loop) - don't really need it for puzzle composition, but it's a good example
+		"LoopChainTest": { start: [3, 6], units: [
 			// Puzzle 1
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
@@ -103,13 +108,61 @@ let PuzzleGenerator = module.exports = (function() {
 			// Puzzle 2
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },	// Could in theory reuse this but eh
 			{ exitPower: [0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
-			{ exitPower: [0,1,0,1], exitLocations: [1], keyLocations: [2], keyLocationOffsets:[0], units: [4,4,4],	// Note addition of length of definitions from puzzle 1
+			{ exitPower: [0,1,0,1], exitLocations: [1], keyLocations: [2], keyLocationOffsets:[0], units: [4,4,4],	// Note addition of length of definitions from puzzle 1 to units and overlap
 				overlap: 7, overlapIndex: 2, overlapCount: 1, overlapKeys: [0,0,0,1], overlapKeyLocations: [2], overlapKeyLocationOffsets: [0] },
 			{ keyLocations: [2], keyLocationOffsets: [0], units: [5,5,5] } // Doesn't need an exit because it's can overlap unit
-		] };
-		// You can bring in superfluous cores from the room with the exit teleporter - potentially making the puzzle solving easier ... that said you don't
-		// make it unsolvable so it's not the biggest issue, but it's kinda inelegant - could throw an extra room with a free teleporter to go back
-		// but the progression / exit teleporter requires you to use the extra cores from the previous room
+		] }
+	};
+
+	// Note on Loop Chain Test
+	// You can bring in superfluous cores from the room with the exit teleporter - potentially making the puzzle solving easier ... that said you don't
+	// make it unsolvable so it's not the biggest issue, but it's kinda inelegant. See planning docs for potential resolutions.
+
+
+	let clone = function(obj) {
+		// This is expense and doesn't work on all data structures but it should be fine here
+		// should probably recursively use Object.assign also consider use of spread syntax
+		// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax
+		return JSON.parse(JSON.stringify(obj));
+	}
+
+	let buildChain = function(puzzles, clonePuzzles) {
+		// If we're reusing puzzles for multiple chains don't want to change the base definition,
+		// so use clonePuzzle in this case, if the puzzle was generated from scratch however, this isn't necessary
+		let start = [];
+		let units = [];
+
+		for (let i = 0, l = puzzles.length; i < l; i++) {
+			let puzzle = clonePuzzles ? clone(puzzles[i]) : puzzles[i];
+			let unitIndexOffset = units.length;
+
+			for (let j = 0, n = puzzle.start.length; j < n; j++) {
+				// Add start unit indices to array, adjusted for existing units
+				start.push(puzzle.start[j] + unitIndexOffset);
+			}
+
+			// Here comes the state mutation which is why we're cloning!
+			for (let j = 0, n = puzzle.units.length; j < n; j++) {
+				// Adjust the unit indices in units array for existing units
+				if (puzzle.units[j].units && puzzle.units[j].units.length) {
+					for (let k = 0, m = puzzle.units[j].units.length; k < m; k++) {
+						puzzle.units[j].units[k] += unitIndexOffset;
+					}
+				}
+				// Adjust the overlap unit index for existing units if it exists
+				if (puzzle.units[j].hasOwnProperty("overlap")) {
+					puzzle.units[j].overlap += unitIndexOffset;
+				}
+			}
+			units.push(...puzzle.units);	// Add all units from this puzzle to units list
+		}
+
+		return { start: start, units: units };
+	};
+
+
+	exports.create = function() {
+		let input = buildChain([ Puzzles.SimpleChain, Puzzles.MixedColorLoop, Puzzles.OverlappingLoops ], true);
 
 		let createRoom = function(roomUnit, isProgression, target) {
 			let room = { teleporters: [], cores: [0,0,0,0] };
@@ -232,10 +285,10 @@ let PuzzleGenerator = module.exports = (function() {
 				}
 			}
 
-			// Now shuffle swap teleporter positions extra random!
+			// Now shuffle teleporter positions extra random!
 			shuffleArray(outputRooms[exitRoomIndex].teleporters);
 
-			// Return exit teleporter so we can add the target room to later
+			// Return exit teleporter so we can add the target room to it later
 			return exitTeleporter;
 		};
 
@@ -263,7 +316,7 @@ let PuzzleGenerator = module.exports = (function() {
 			// Next added room will be start index for this unit
 			startRoomIndicies[startUnitIndex] = output.rooms.length;
 
-			if (!startUnit.units || !startUnit.units.length) {
+			if (!startUnit.units || !startUnit.units.length) {	// Just a single room. Most basic puzzle!
 				let room = createRoom(startUnit, true);
 				exitTeleporters[startUnitIndex] = room.teleporters[0];	// Only one teleporter in this room!
 				output.rooms.push(room);
