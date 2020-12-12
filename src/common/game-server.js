@@ -192,6 +192,8 @@ let GameServer = module.exports = (function() {
 				}
 
 				if (closestInteractable != null) {
+					let response = { type: MessageType.INTERACT, id: id };
+
 					let interactable = closestInteractable;
 					// Interact!
 					let heldPickupState = getHeldPickup(id);
@@ -213,7 +215,7 @@ let GameServer = module.exports = (function() {
 						setInteractableGlobalState(id, interactable.id, interactable.power);
 
 						// Set message pickup id
-						message.pickupId = heldPickup.id
+						response.pickupId = heldPickup.id
 					} else if (result) {
 						result.enabled = false;
 						setPickupGlobalState(id, result.id, id);
@@ -223,9 +225,8 @@ let GameServer = module.exports = (function() {
 					// If we expand what interactables can do, e.g. just switches
 					// need to respond to state change here and put it in global state
 
-					message.id = id;
-					message.interactableId = interactable.id;
-					distributeMessage(id, -1, message);
+					response.interactableId = interactable.id;
+					distributeMessage(id, -1, response);
 				}
 				break;
 			case MessageType.POSITION:  // This is more a player transform / input sync

@@ -92,7 +92,7 @@ let GameClient = module.exports = (function(){
 
 		if (localPlayer && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
 			Fury.Input.requestPointerLock();
-			/* Full Screen - probably want a explicit button for this
+			/* Full Screen - probably want a
 			if (!document.fullscreenElement) {
 				glCanvas.requestFullscreen();
 			}*/
