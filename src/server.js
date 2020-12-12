@@ -3,7 +3,7 @@ let CloseCode = require('./common/websocket-close-codes');
 
 // Config
 // Would be better read from a config file
-const isLocalHost = false;
+const isLocalHost = true;
 const idleTimeout = 120;
 const maxConnections =  8;
 
