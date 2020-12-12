@@ -2227,7 +2227,8 @@ let sendMessage = (message) => {
   if (acknowledged) {
     Connection.send(message);
   } else {
-    GameServer.onmessage(0, message);
+    // Deep clone via json stringify / parse - prevents server messing with client objects when using local relay 
+    GameServer.onmessage(0, JSON.parse(JSON.stringify(message)));
   }
 };
 
@@ -2699,6 +2700,11 @@ let WorldVisuals = require('./world-visuals');
 
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
+
+let gameStarted = false;
+gameStart = function() {
+	gameStarted = true;
+};
 
 // Game Client
 // Handles the visuals, local player movement, and interp of remote clients

@@ -7,6 +7,11 @@ let WorldVisuals = require('./world-visuals');
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
 
+let gameStarted = false;
+gameStart = function() {
+	gameStarted = true;
+};
+
 // Game Client
 // Handles the visuals, local player movement, and interp of remote clients
 let GameClient = module.exports = (function(){

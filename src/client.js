@@ -23,7 +23,8 @@ let sendMessage = (message) => {
   if (acknowledged) {
     Connection.send(message);
   } else {
-    GameServer.onmessage(0, message);
+    // Deep clone via json stringify / parse - prevents server messing with client objects when using local relay 
+    GameServer.onmessage(0, JSON.parse(JSON.stringify(message)));
   }
 };
 
