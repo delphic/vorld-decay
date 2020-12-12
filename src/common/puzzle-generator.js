@@ -87,13 +87,29 @@ let PuzzleGenerator = module.exports = (function() {
 			]
 		};*/
 		// Sixth Test - chaining teleporters - start with green room, then yellow room, then test #3
-		let input = { start: [1, 2, 3], units: [
+		/*let input = { start: [1, 2, 3], units: [
 			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 			{ exitPower: [0,0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 		 	{ exitPower: [1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] } ],
-		}
+		};*/
 		// Seventh Text - chain loops - Fourth Test into Fifth Test
+		let input = { start: [3, 6], units: [
+			// Puzzle 1
+			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+			{ exitPower: [], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+			{ exitPower: [0,0,1,1], exitLocations: [0], keyLocations:[0], keyLocationOffsets: [0] },
+			{ exitPower: [0,1], exitLocations: [0], keyLocations: [1], keyLocationOffsets: [0], units: [0,1,2] },
+			// Puzzle 2
+			{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },	// Could in theory reuse this but eh
+			{ exitPower: [0,1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+			{ exitPower: [0,1,0,1], exitLocations: [1], keyLocations: [2], keyLocationOffsets:[0], units: [4,4,4],	// Note addition of length of definitions from puzzle 1
+				overlap: 7, overlapIndex: 2, overlapCount: 1, overlapKeys: [0,0,0,1], overlapKeyLocations: [2], overlapKeyLocationOffsets: [0] },
+			{ keyLocations: [2], keyLocationOffsets: [0], units: [5,5,5] } // Doesn't need an exit because it's can overlap unit
+		] };
+		// You can bring in superfluous cores from the room with the exit teleporter - potentially making the puzzle solving easier ... that said you don't
+		// make it unsolvable so it's not the biggest issue, but it's kinda inelegant - could throw an extra room with a free teleporter to go back
+		// but the progression / exit teleporter requires you to use the extra cores from the previous room
 
 		let createRoom = function(roomUnit, isProgression, target) {
 			let room = { teleporters: [], cores: [0,0,0,0] };
@@ -140,7 +156,8 @@ let PuzzleGenerator = module.exports = (function() {
 			outputRooms[exitRoomIndex].teleporters.push(exitTeleporter);
 
 			let overlapRoomCount = 0;
-			if (startUnit.hasOwnProperty("overlap")) {
+			if (startUnit.hasOwnProperty("overlap") && input.units[startUnit.overlap].units && input.units[startUnit.overlap].units.length) {
+				// Requires have overlap unit index and that overlap unit has sub units (also technically requires that those units are in fact rooms)
 				// Add overlaps!
 				// overlap: 3, overlapIndex: 2, overlapCount: 1
 				let overlapUnit = input.units[startUnit.overlap];	// Might we want to support more than two overlapping units? Might we want to chain? We might well
@@ -157,7 +174,7 @@ let PuzzleGenerator = module.exports = (function() {
 							// First new room which'll be
 							targetIndex = unitRoomCount;
 						}
-						overlapRoom.teleporters.push(createTeleporter(overlapUnitRoom.exitPower, false, targetIndex));
+						overlapRoom.teleporters.push(createTeleporter(overlapUnitRoom.exitPower, false, roomIndexOffset + targetIndex));
 						// Add Another Teleporter to this room
 					} else {
 						// Not an overlapping room add to full list, we'll be targeting the next one unless we're about to run out
@@ -188,7 +205,7 @@ let PuzzleGenerator = module.exports = (function() {
 				requiredPower -= minPowerRequirement;
 
 				if (requiredPower > 0) {
-					if (startUnit.hasOwnProperty("overlap") && startUnit.overlapKeys && startUnit.overlapKeys.length > colorIndex) {
+					if (overlapRoomCount > 0 && startUnit.overlapKeys && startUnit.overlapKeys.length > colorIndex) {
 						// overlapKeys: [0,0,0,1], overlapKeyLocation: 2
 						// TODO: check to see if overlapKeys has an entry for this colour index if so place in there
 						let targetPower = Math.min(requiredPower, startUnit.overlapKeys[colorIndex] | 0);
