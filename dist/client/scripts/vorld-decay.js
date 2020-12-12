@@ -4882,11 +4882,25 @@ let PuzzleGenerator = module.exports = (function() {
 	let Puzzles = {
 		// It's just a room (exit: red)
 		"Room": { start: [0], units: [ { exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] } ] },
-		// Loop of 3 of one type of room (loop color: red, exit: blue, yellow)
+		// Loop of 3 of one type of room (loop color: red, exit: blue) - Allows carry forward
 		"SimpleLoop": {
 			start: [1], units: [
 				{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		 		{ exitPower: [0, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [0], units: [0,0,0] }
+			]
+		},
+		// Loop of 3 of one type of room (loop color: red, exit: blue, yellow)	- Allows carry forward as does any exit teleporter that doesn't also use loop color
+		"TwoColorExitLoop": {
+			start: [1], units: [
+				{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
 		 		{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [2], keyLocationOffsets: [1,0], units: [0,0,0] }
+			]
+		},
+		// Same as two color exit loop but key locations are different - Allows carry forward
+		"TwoColorExitLoop2": {
+			start: [1], units: [
+				{ exitPower: [1], exitLocations: [0], keyLocations: [0], keyLocationOffsets: [0] },
+		 		{ exitPower: [0, 1, 1], exitLocations: [1], keyLocations: [1], keyLocationOffsets: [1,0], units: [0,0,0] }
 			]
 		},
 		// Loop of 3 of one type of room, but exit color is sharead (loop color: red, exit: red, blue)
@@ -4947,7 +4961,84 @@ let PuzzleGenerator = module.exports = (function() {
 		// should probably recursively use Object.assign also consider use of spread syntax
 		// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Spread_syntax
 		return JSON.parse(JSON.stringify(obj));
-	}
+	};
+
+	let randomRange = function(min, max) {	// TODO: Add to Fury.Maths
+		min = Math.ceil(min);
+		max = Math.floor(max);
+		return Math.floor(Math.random() * (max - min) + min); // max execlusive, min inclusive
+	};
+
+	// https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+	let shuffleArray = function(array) {
+		let currentIndex = array.length, temp, randomIndex;
+		while (0 !== currentIndex) {
+			randomIndex = Math.floor(Math.random() * currentIndex);
+			currentIndex -= 1;
+			temp = array[currentIndex];
+			array[currentIndex] = array[randomIndex];
+			array[randomIndex] = temp;
+		}
+		return array;
+	};
+
+	let cycleColors = function(puzzle, cycleCount) {
+		cycleCount = cycleCount % 4;	// only four colours so :shrug:
+		//  NOTE: Mutates state!
+		for (let i = 0, l = puzzle.units.length; i < l; i++) {
+			// Shift all exitPower arrays
+			// e.g. cycleCount: 1 => [1,0,1,0] -> [0,1,0,1]
+			let exitPower = puzzle.units[i].exitPower;
+			if (exitPower && exitPower.length) {
+					// Expand to all colors so that can cycle more easily
+				while (exitPower.length < 4) {
+					exitPower.push(0);
+				}
+			}
+
+			let overlapKeys = puzzle.units[i].overlapKeys;
+			if (overlapKeys && overlapKeys.length) {
+				// Expand to all colors so that can cycle more easily
+				while (overlapKeys.length < 4) {
+					overlapKeys.push(0);
+				}
+			}
+
+			for (let c = 0; c < cycleCount; c++) {
+				// Not an efficient way, could just shift up using temp values, but this only runs once on server :shrug:
+				if (exitPower && exitPower.length) {
+					exitPower.splice(0, 0, exitPower[3]);	// Take from end, add to start
+					exitPower.length = 4;			// chop off end
+				}
+
+				if (overlapKeys && overlapKeys.length) {
+					overlapKeys.splice(0,0, overlapKeys[3]);
+					overlapKeys.length = 4;
+				}
+
+				// Rotate the location offsets
+				if (puzzle.units[i].keyLocationOffsets && puzzle.units[i].keyLocationOffsets.length > 1) {
+					let array = puzzle.units[i].keyLocationOffsets;
+					if (array.length == 3) array.push(array[0]);
+					// ^^ length of 3 would change key locations so add the first entry to the end,
+					// this won't cycle the same way as if you used indices relying on modulus but oh well, just don't do that?
+					let count = array.length;
+					array.splice(0,0, array[count-1]);
+					array.length = count;
+				}
+				if (puzzle.units[i].overlapKeyLocationOffsets && puzzle.units[i].overlapKeyLocationOffsets > 1) {
+					let array = puzzle.units[i].overlapKeyLocationOffsets;
+					if (array.length == 3) array.push(array[0]);
+					// ^^ length of 3 would change key locations so add the first entry to the end,
+					// this won't cycle the same way as if you used indices relying on modulus but oh well, just don't do that?
+					let count = array.length;
+					array.splice(0,0, array[count-1]);
+					array.length = count;
+				}
+			}
+		}
+		return puzzle;
+	};
 
 	let buildChain = function(puzzles, clonePuzzles) {
 		// If we're reusing puzzles for multiple chains don't want to change the base definition,
@@ -4957,6 +5048,7 @@ let PuzzleGenerator = module.exports = (function() {
 
 		for (let i = 0, l = puzzles.length; i < l; i++) {
 			let puzzle = clonePuzzles ? clone(puzzles[i]) : puzzles[i];
+			cycleColors(puzzle, randomRange(0,4));	// Mix up the colors!
 			let unitIndexOffset = units.length;
 
 			for (let j = 0, n = puzzle.start.length; j < n; j++) {
@@ -4983,9 +5075,30 @@ let PuzzleGenerator = module.exports = (function() {
 		return { start: start, units: units };
 	};
 
+	let generateChain = function(length, introLength, overlapDelay) {
+		// Every existing puzzle demonstrates a new concept, difficultly doesn't really come into it
+		// Arugably just a room is easiest, follow by room loop, followed by shared loop / mixed loop, and then loop overlap is a step up
+		let puzzles = [];
+		for (let i = 0; i < length; i++) {
+			if (i < introLength) {
+				// Super Easy Puzzles
+				puzzles.push([Puzzles.Room, Puzzles.SimpleLoop][randomRange(0,2)]);	// Simple loop isn't that simple it brings a choice!
+			} else if (i < overlapDelay) {
+				// Middling Puzzles
+				puzzles.push([Puzzles.TwoColorExitLoop, Puzzles.TwoColorExitLoop2, Puzzles.SimpleChain, Puzzles.MixedColorLoop, Puzzles.SimpleSharedColorLoop][randomRange(0, 5)]);
+			} else {
+				// Getting Harder
+				puzzles.push([Puzzles.MixedColorLoop, Puzzles.SimpleSharedColorLoop, Puzzles.OverlappingLoops, Puzzles.OverlappingLoops][randomRange(0, 4)]);
+				// ^^ Would be nice to mutate the colours by random amount when adding
+				// Might be nice to have explicit weights (rather than repeating the same puzzle in the array)
+			}
+		}
+
+		return buildChain(puzzles, true);
+	};
 
 	exports.create = function() {
-		let input = buildChain([ Puzzles.SimpleChain, Puzzles.MixedColorLoop, Puzzles.OverlappingLoops ], true);
+		let input = generateChain(5, 1, 2);
 
 		let createRoom = function(roomUnit, isProgression, target) {
 			let room = { teleporters: [], cores: [0,0,0,0] };
@@ -5050,8 +5163,10 @@ let PuzzleGenerator = module.exports = (function() {
 							// First new room which'll be
 							targetIndex = unitRoomCount;
 						}
-						overlapRoom.teleporters.push(createTeleporter(overlapUnitRoom.exitPower, false, roomIndexOffset + targetIndex));
 						// Add Another Teleporter to this room
+						overlapRoom.teleporters.push(createTeleporter(overlapUnitRoom.exitPower, false, roomIndexOffset + targetIndex));
+						// And now shuffle
+						shuffleArray(overlapRoom.teleporters);
 					} else {
 						// Not an overlapping room add to full list, we'll be targeting the next one unless we're about to run out
 						let targetIndex = outputRooms.length + 1;
@@ -5113,19 +5228,6 @@ let PuzzleGenerator = module.exports = (function() {
 
 			// Return exit teleporter so we can add the target room to it later
 			return exitTeleporter;
-		};
-
-		// https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
-		let shuffleArray = function(array) {
-			let currentIndex = array.length, temp, randomIndex;
-			while (0 !== currentIndex) {
-				randomIndex = Math.floor(Math.random() * currentIndex);
-				currentIndex -= 1;
-				temp = array[currentIndex];
-				array[currentIndex] = array[randomIndex];
-				array[randomIndex] = temp;
-			}
-			return array;
 		};
 
 		let startRoomIndicies = []; // unitIndex -> start room index
