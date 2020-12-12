@@ -1,6 +1,6 @@
 let CloseCode = require('./common/websocket-close-codes');
 
-let isLocalHost = false; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
+let isLocalHost = true; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
 let acknowledged = false; // Acknowledged by websocket server
 
 let Connection = require('./client/connection');
