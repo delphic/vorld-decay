@@ -130,20 +130,21 @@ let PuzzleGenerator = module.exports = (function() {
 			output.rooms.push(createRoom(startUnit, true));
 		} else {
 			// Recurve into units
-			let unitRooms = output.rooms;
-			let nestingLevel = 1;	// TODO: Support more than one please!
+			let roomIndexOffset = 0;	// TOO: Add to this if you needed to run multiple times or recurse
+			let outputRooms = output.rooms;
+			let nestingLevel = 1;	// TODO: Support more than one please! I guess we should calculate ?
 
 			// NOTE: using output.rooms to mean rooms for this unit, which would not be true with further nesting
 			// Also some of the maths likely wouldn't work
 			for (let i = 0, l = startUnit.units.length; i < l; i++) {
 				// NOTE: Assuming these units are rooms, which is not valid but one step at a time kay
-				unitRooms.push(createRoom(input.units[startUnit.units[i]], false, (i + 1) % l));
+				outputRooms.push(createRoom(input.units[startUnit.units[i]], false, (i + 1) % l));
 			}
-			let unitRoomCount = unitRooms.length;
-			let exitRoomIndex = startUnit.exitLocations[0] % unitRoomCount;	// Additional array entries would be used for further nesting
+			let unitRoomCount = outputRooms.length - roomIndexOffset;
+			let exitRoomIndex = roomIndexOffset + (startUnit.exitLocations[0] % unitRoomCount);	// Additional array entries would be used for further nesting
 
 			// Add exit teleporter
-			unitRooms[exitRoomIndex].teleporters.push(createTeleporter(startUnit.exitPower, true));
+			outputRooms[exitRoomIndex].teleporters.push(createTeleporter(startUnit.exitPower, true));
 
 			let overlapRoomCount = 0;
 			if (startUnit.hasOwnProperty("overlap")) {
@@ -154,8 +155,8 @@ let PuzzleGenerator = module.exports = (function() {
 					let overlapUnitRoom = input.units[overlapUnit.units[i]];
 					let overlapRoom = null;
 					if (i < startUnit.overlapCount) {
-						let overlapRoomIndex = (startUnit.overlapIndex + i) % unitRoomCount;
-						overlapRoom = unitRooms[overlapRoomIndex];
+						let overlapRoomIndex = roomIndexOffset + ((startUnit.overlapIndex + i) % unitRoomCount);
+						overlapRoom = outputRooms[overlapRoomIndex];
 						let targetIndex = 0
 						if (i + 1 < startUnit.overlapCount || i + 1 == l) {
 							targetIndex = (i + 1) % unitRoomCount;
@@ -167,13 +168,12 @@ let PuzzleGenerator = module.exports = (function() {
 						// Add Another Teleporter to this room
 					} else {
 						// Not an overlapping room add to full list, we'll be targeting the next one unless we're about to run out
-						let targetIndex = unitRooms.length + 1;
+						let targetIndex = outputRooms.length + 1;
 						if (i + 1 == l) {
 							// back to the first overlapping room thanks!
-							targetIndex = startUnit.overlapIndex % unitRoomCount;
+							targetIndex = roomIndexOffset + (startUnit.overlapIndex % unitRoomCount);
 						}
-						// It's now no longer unitRooms but all rooms
-						unitRooms.push(createRoom(input.units[overlapUnit.units[i]], false, targetIndex));
+						outputRooms.push(createRoom(input.units[overlapUnit.units[i]], false, targetIndex));
 					}
 				}
 				// Have added as many new rooms as necessary!
@@ -187,7 +187,7 @@ let PuzzleGenerator = module.exports = (function() {
 				// Account for shared power needs - don't spawn cores which have to be available for the room because of the lower loop teleporters
 				let minPowerRequirement = 0;
 				for (let i = 0; i < nestingLevel; i++) {
-					let teleporter = unitRooms[exitRoomIndex].teleporters[i];
+					let teleporter = outputRooms[exitRoomIndex].teleporters[i];
 					if (colorIndex < teleporter.powerRequirements.length) {
 						minPowerRequirement += teleporter.powerRequirements[colorIndex] | 0;
 					}
@@ -205,25 +205,25 @@ let PuzzleGenerator = module.exports = (function() {
 							let overlapLoopIndex = (startUnit.overlapKeyLocations[0] + startUnit.overlapKeyLocationOffsets[offsetIndex]) % overlapRoomCount; // Additional array entries would be used for further nesting
 							let coreRoomIndex = 0;
 							if (overlapLoopIndex < startUnit.overlapCount) {
-								coreRoomIndex = (overlapStartIndex + overlapLoopIndex) % unitRoomCount;
+								coreRoomIndex = roomIndexOffset + ((overlapStartIndex + overlapLoopIndex) % unitRoomCount);
 							} else {
-								coreRoomIndex = unitRoomCount + overlapLoopIndex - startUnit.overlapCount;
+								coreRoomIndex = roomIndexOffset + unitRoomCount + overlapLoopIndex - startUnit.overlapCount;
 							}
-							unitRooms[coreRoomIndex].cores[colorIndex] += targetPower;
+							outputRooms[coreRoomIndex].cores[colorIndex] += targetPower;
 							requiredPower -= targetPower;
 						}
 					}
 					if (requiredPower > 0) {
-						let offsetIndex = colorIndex % startUnit.keyLocationOffsets.length;
+						let keyLocationOffsetIndex = colorIndex % startUnit.keyLocationOffsets.length;
 						// key location offsets is used for multiple color keys - this does mean the pattern would be cyclically the same for additional nesting but :shrug:
-						let coreRoomIndex = (startUnit.keyLocations[0] + startUnit.keyLocationOffsets[offsetIndex]) % unitRoomCount; // Additional array entries would be used for further nesting
-						unitRooms[coreRoomIndex].cores[colorIndex] += requiredPower;
+						let coreRoomIndex = roomIndexOffset + ((startUnit.keyLocations[0] + startUnit.keyLocationOffsets[keyLocationOffsetIndex]) % unitRoomCount); // Additional array entries would be used for further nesting
+						outputRooms[coreRoomIndex].cores[colorIndex] += requiredPower;
 					}
 				}
 			}
 
 			// Now shuffle swap teleporter positions extra random!
-			shuffleArray(unitRooms[exitRoomIndex].teleporters);
+			shuffleArray(outputRooms[exitRoomIndex].teleporters);
 		}
 
 		return output;

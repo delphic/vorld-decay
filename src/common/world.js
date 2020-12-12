@@ -95,7 +95,9 @@ let World = module.exports = (function() {
 		// Teleporters are 3x3 with collision bounds of 1x2x1 (whilst we have instant teleport)
 		let createTeleporter = function(x, y, z, targetPoint, targetRotation) {
 			let teleporterBlock = VorldConfig.BlockIds.GRASS;
+			let innerBlock = VorldConfig.BlockIds.STONE;
 			fill(x-1,x+1, y-1,y-1, z-1,z+1, teleporterBlock); // half step at y would be nice
+			fill(x,x,y-1,y-1,z,z, innerBlock);
 
 			let teleporterBounds = Physics.Box.create({
 				min: vec3.fromValues(x, y, z),
@@ -340,7 +342,7 @@ let World = module.exports = (function() {
 							pickupIds[j],
 							roomOffset[0] + xSpacing * (spawnCount + 1),
 							roomOffset[1] + 0.5,
-							roomOffset[2] - (zPadding/2),
+							roomOffset[2] - (2 * zPadding / 3),
 							1.5,
 							false);
 						spawnCount++;
