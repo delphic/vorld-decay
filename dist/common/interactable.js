@@ -161,6 +161,7 @@ let Interactable = module.exports = (function() {
 		let max = vec3.create();
 		vec3.add(max, min, size);
 		interactable.bounds = Bounds.create({ min: min, max: max });
+		interactable.position = vec3.clone(interactable.bounds.center);	// TODO: Provide actual position rather than bounds center
 
 		// Append interact method
 		switch(params.type) {
