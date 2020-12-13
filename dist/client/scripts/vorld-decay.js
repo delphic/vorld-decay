@@ -2797,7 +2797,7 @@ let GameClient = module.exports = (function(){
 			lastNetSendTime = time;
 		}
 
-		if (localPlayer && playButtonPressed && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+		if (localPlayer && playButtonPressed && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0, true)) {
 			Fury.Input.requestPointerLock();
 			/* Full Screen - probably want a
 			if (!document.fullscreenElement) {
