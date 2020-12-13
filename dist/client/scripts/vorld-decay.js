@@ -2204,7 +2204,7 @@ var Transform = module.exports = function() {
 },{"./maths":8}],16:[function(require,module,exports){
 let CloseCode = require('./common/websocket-close-codes');
 
-let isLocalHost = true; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
+let isLocalHost = false; // Is running on localhost / development machine, not is hosting local server, or in fact hosting a server for other local clients
 let acknowledged = false; // Acknowledged by websocket server
 
 let Connection = require('./client/connection');
@@ -2227,7 +2227,7 @@ let sendMessage = (message) => {
   if (acknowledged) {
     Connection.send(message);
   } else {
-    // Deep clone via json stringify / parse - prevents server messing with client objects when using local relay 
+    // Deep clone via json stringify / parse - prevents server messing with client objects when using local relay
     GameServer.onmessage(0, JSON.parse(JSON.stringify(message)));
   }
 };
