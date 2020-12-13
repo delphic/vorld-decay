@@ -117,6 +117,7 @@ let Player = module.exports = (function() {
     player.world = params.world;
     player.position = params.position;
     player.rotation = params.rotation;
+		player.pitch = 0;
     player.lookRotation = quat.clone(params.rotation);
     player.localX = vec3.create();
     player.localZ = vec3.create();
@@ -201,7 +202,7 @@ let Player = module.exports = (function() {
         // That would then remove all these hacks around calculating a useful pitch / yaw value
         let pitch = getPitch(player.lookRotation);  // atan rather than atan2 as we don't want more than -90:90 range
         let pitchRotation = elapsed * player.lookInput[1];
-        if (Math.sign(pitch) == -Math.sign(pitchRotation) || Math.abs(pitch - pitchRotation) < halfPI - clampAngle) {
+        if (Math.sign(pitch) == -Math.sign(pitchRotation) || Math.abs(pitch + pitchRotation) < halfPI - clampAngle) {
           quat.rotateX(player.lookRotation, player.lookRotation, pitchRotation);
         }
         quat.copy(targetRotation, player.lookRotation);
