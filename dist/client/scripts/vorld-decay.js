@@ -2701,7 +2701,7 @@ let WorldVisuals = require('./world-visuals');
 // glMatrix
 let vec3 = Fury.Maths.vec3, quat = Fury.Maths.quat;
 
-let gameStarted = false;
+
 // HACK: Global for notifying game start - should attach a listener
 gameStart = function() {
 	gameStarted = true;
@@ -2726,6 +2726,8 @@ let GameClient = module.exports = (function(){
 	let scene = Fury.Scene.create({ camera: camera, enableFrustumCulling: true });
 	let world = require('../common/world').create();
 
+	let playButtonPressed = false;
+
 	let localId = -1;
 	let localNick = "";
 	let sendMessage; // fn expects simple obj to send, does not expect you to send id - server will append
@@ -2749,6 +2751,11 @@ let GameClient = module.exports = (function(){
 
 	// TODO: Separate nick setting (i.e. greet response)
 	exports.init = (nick, sendDelegate) => {
+		document.getElementById('play_button').onclick = () => {
+			playButtonPressed = true;
+			document.getElementById('play_prompt').style = 'display: none;'
+		};
+
 		sendMessage = sendDelegate;
 		localNick = nick;
 
@@ -2790,7 +2797,7 @@ let GameClient = module.exports = (function(){
 			lastNetSendTime = time;
 		}
 
-		if (localPlayer && gameStarted && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
+		if (localPlayer && playButtonPressed && !Fury.Input.isPointerLocked() && Fury.Input.mouseDown(0)) {
 			Fury.Input.requestPointerLock();
 			/* Full Screen - probably want a
 			if (!document.fullscreenElement) {

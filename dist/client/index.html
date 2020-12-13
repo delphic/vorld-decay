@@ -17,14 +17,8 @@
 				<p>Use WASD to move, look around with the mouse or the arrow keys.</p>
 				<p>Use E or left click to pickup and drop cores, and also to place or remove them from the control panels.</p>
 				<p>Good Luck!</p>
-				<input type="button" value="Brave the Labyrinth" onclick="start();" />
+				<input id="play_button" type="button" value="Brave the Labyrinth" onclick="start();" />
 			</div>
-			<script>
-let start = function() {
-	document.getElementById('play_prompt').style = 'display: none;';
-	gameStart();	// Call global to notify of game start
-}
-			</script>
 		</div>
 		<canvas id="fury" oncontextmenu="return false;"></canvas>
 	</body>
