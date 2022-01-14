@@ -12,8 +12,8 @@ if (isLocalHost) {
   app = uWS.App();
 } else {
   app = uWS.SSLApp({
-    key_file_name: '../../ws/misc/privkey.pem',
-    cert_file_name: '../../ws/misc/fullchain.pem'
+    key_file_name: '../../../certs/delphic.me.uk/key.pem',
+    cert_file_name: '../../../certs/delphic.me.uk/fullchain.pem'
   });
 }
 
